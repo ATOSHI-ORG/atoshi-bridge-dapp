@@ -1,0 +1,532 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+export type Language = 'en' | 'zh';
+
+export interface I18nContextType {
+  lang: Language;
+  setLang: (lang: Language) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}
+
+const STORAGE_KEY = 'atoshi_bridge_lang';
+
+export const translations = {
+  en: {
+    // Header & Meta
+    'app.title': 'Atoshi Bridge',
+    'app.network': 'Mainnet',
+    'app.tab_bridge_out': 'Bridge Out (Atoshi → ETH)',
+    'app.tab_bridge_in': 'Bridge In (ETH → Atoshi)',
+    'app.history_tooltip': 'Transaction History',
+    'app.faq_tooltip': 'Help & Support',
+    'app.lang_toggle': 'Language',
+    'app.footer_text': 'Atoshi Network × Ethereum · Hyperlane ISM',
+    'app.footer_sub': 'Embedded Wallet Security · Fixed Monospaced Numeric Display',
+
+    // Maintenance Mode
+    'maint.title': 'Bridge Under Maintenance',
+    'maint.desc': 'Smart contracts are undergoing routine maintenance and liquidity verification. Cross-chain bridging is temporarily paused and will resume shortly.',
+    'maint.btn_restore': 'Switch to Normal Scenario',
+
+    // Bridge Out View
+    'bridge_out.lock_label': 'Lock ATOS (Atoshi Chain)',
+    'bridge_out.balance': 'Balance:',
+    'bridge_out.max': 'MAX',
+    'bridge_out.quick': 'Quick:',
+    'bridge_out.small_cap': 'Small cap',
+    'bridge_out.suggest_label': 'Suggested:',
+    'bridge_out.adopt_btn': 'Adopt',
+    'bridge_out.receive_label': 'Ethereum Mainnet will receive (100:1 Fixed Peg)',
+    'bridge_out.erc20_unit': 'ERC20 ATOS',
+    'bridge_out.recipient_label': 'Recipient Address (Ethereum Mainnet)',
+    'bridge_out.address_book': 'Address Book',
+    'bridge_out.recipient_placeholder': '0x formatted 42-char Ethereum address (No ENS)',
+    'bridge_out.invalid_eth_addr': 'Please enter a valid 42-character Ethereum address starting with 0x (ENS not supported)',
+    'bridge_out.encoding_title': 'On-Chain 32-Byte Encoding (12 leading zero bytes)',
+    'bridge_out.disclaimer': 'I confirm the recipient is a correct Ethereum private key address controlled by me. Assets will be locked at a 100:1 ratio. Bridging takes 1–5 mins and cannot be cancelled.',
+    'bridge_out.btn_submitting': 'Signing & broadcasting transaction...',
+    'bridge_out.btn_maint': 'Bridge is under maintenance',
+    'bridge_out.btn_invalid_addr': 'Enter valid Ethereum address',
+    'bridge_out.btn_check_disclaimer': 'Please accept disclaimer',
+    'bridge_out.btn_submit': 'Confirm Bridge Out (Atoshi → ETH)',
+    'bridge_out.btn_invalid_amount': 'Enter valid transfer amount',
+    'bridge_out.security_note': 'Hyperlane Interchain Security Module · On-chain contract secured',
+
+    // Bridge In View
+    'bridge_in.lock_label': 'Lock ERC20 ATOS (Ethereum Mainnet)',
+    'bridge_in.balance': 'Balance:',
+    'bridge_in.max': 'MAX',
+    'bridge_in.exceed_balance': 'Exceeds available Ethereum ERC20 balance (Available: {balance})',
+    'bridge_in.receive_label': 'Atoshi Mainnet will receive (1 ERC20 = 100 Native ATOS)',
+    'bridge_in.rules_title': 'Bridge In Rules (Unlimited, No Rate Limits)',
+    'bridge_in.rules_badge': 'Unrestricted',
+    'bridge_in.rules_desc': 'Bridge in from Ethereum to Atoshi is NOT restricted by 5-tier rate limits. Any amount can be transferred freely.',
+    'bridge_in.liquidity_title': 'Liquidity Queue Protection',
+    'bridge_in.liquidity_desc': 'If the Atoshi pool is temporarily replenishing, the cross-chain message is safely retained in "Waiting for Liquidity" queue. Assets are 100% safe and will never be lost.',
+    'bridge_in.faq_link': 'Q&A',
+    'bridge_in.recipient_label': 'Recipient Address (Atoshi Mainnet)',
+    'bridge_in.fill_my_addr': 'Use My Address',
+    'bridge_in.recipient_placeholder': 'Bech32 address starting with atoshi1',
+    'bridge_in.invalid_atoshi_addr': 'Please enter a valid Atoshi address starting with atoshi1',
+    'bridge_in.disclaimer': 'I confirm this is an Atoshi native address controlled by me. Ethereum cross-chain transactions are irreversible.',
+    'bridge_in.btn_submitting': 'Awaiting Ethereum wallet signature...',
+    'bridge_in.btn_enter_amount': 'Enter transfer amount',
+    'bridge_in.btn_insufficient_bal': 'Insufficient ERC20 balance',
+    'bridge_in.btn_submit': 'Sign & Bridge (ETH → Atoshi)',
+    'bridge_in.security_note': 'Locked on Ethereum · Atoshi automatically releases ATOS upon Hyperlane verification',
+
+    // Quota Panel
+    'quota.crisis_title': 'Liquidity Crisis Mode Active:',
+    'quota.crisis_desc': 'Pool balance is low (< 10%). Large transfer channel is temporarily locked. Only transfers ≤ 100,000 ATOS are accepted.',
+    'quota.max_transferable': 'Current Max Transferable',
+    'quota.daily_reset': 'Daily Reset',
+    'quota.global_cap': 'Global Daily Quota (5% Pool Cap)',
+    'quota.large_quota': 'Large Transfer Quota (80% Shared)',
+    'quota.large_badge': 'Large',
+    'quota.locked_crisis': 'Locked (Crisis Mode)',
+    'quota.address_cap': 'Personal Daily Quota (2% Cap)',
+    'quota.min_transfer': 'Min Transfer:',
+    'quota.multiples_100': 'Multiples of 100',
+    'quota.rules_details': 'Rate Limit Rules',
+    'quota.rules_tooltip': 'View 5-Tier Rate Limit Rules',
+
+    // 5-Tier Rules Modal
+    'rules.title': 'Bridge Out: 5-Tier Rate Limits',
+    'rules.subtitle': 'On-Chain Native Risk Control System',
+    'rules.peg_title': 'Fixed On-Chain Peg Ratio',
+    'rules.peg_desc': '100 ATOS = 1 ERC20 ATOS. This ratio is permanently locked by smart contracts with zero slippage.',
+    'rules.order_title': '5-Tier Evaluation Order (Minimum of all layers applies)',
+    'rules.tier1_title': '1. Single Transfer Minimum',
+    'rules.tier1_val': '1,000 ATOS',
+    'rules.tier1_desc': 'Transfers below this are rejected on-chain to cover Hyperlane validator gas overhead.',
+    'rules.tier2_title': '2. Liquidity Crisis Mode',
+    'rules.tier2_active': '🚨 Active Now',
+    'rules.tier2_inactive': 'Triggers when pool < 10%',
+    'rules.tier2_desc': 'When migration_pool balance falls below 10%, large-value transfers are locked; only ≤ 100,000 ATOS is permitted.',
+    'rules.tier3_title': '3. Global Daily Cap',
+    'rules.tier3_val': '5% Pool / Day',
+    'rules.tier3_desc': 'Shared daily quota for all users: min(5×10²⁷ ATOS, pool balance × 5%), reset at 00:00 UTC daily.',
+    'rules.tier4_title': '4. Large Transfer Quota & 20% Reserved',
+    'rules.tier4_val': '20% Small Transfer Reserved',
+    'rules.tier4_desc': 'Small transfers (≤ 100,000 ATOS) enjoy 20% dedicated quota; large transfers can only use up to 80% to prevent whale exhaustion.',
+    'rules.tier5_title': '5. Per-Address Daily Cap',
+    'rules.tier5_val': '2% of Global Cap',
+    'rules.tier5_desc': 'Each Atoshi address is capped at 2% of the global daily quota per day to prevent address-level bank runs.',
+    'rules.tier6_title': '6. Multiples of 100 Requirement',
+    'rules.tier6_val': 'Amount % 100 == 0',
+    'rules.tier6_desc': 'Because of the 100:1 conversion to ERC20, remainder fractions cannot be expressed in ERC20 and are rejected on-chain.',
+    'rules.btn_understand': 'I Understand',
+
+    // Address Book Modal
+    'ab.title_eth': 'Ethereum Address Book',
+    'ab.title_atos': 'Atoshi Address Book',
+    'ab.subtitle': 'Quickly autofill frequent recipient addresses',
+    'ab.add_new': 'Add New Address',
+    'ab.label_name': 'Label (e.g. My Ledger / Binance)',
+    'ab.label_placeholder': 'e.g. Personal MetaMask',
+    'ab.eth_addr_label': 'Ethereum Address (0x...)',
+    'ab.atos_addr_label': 'Atoshi Address (atoshi1...)',
+    'ab.err_label_required': 'Please enter an address label',
+    'ab.err_invalid_eth': 'Please enter a valid 42-char Ethereum address (0x...)',
+    'ab.err_invalid_atos': 'Please enter a valid Atoshi address (atoshi1...)',
+    'ab.btn_cancel': 'Cancel',
+    'ab.btn_save': 'Save Address',
+    'ab.btn_trigger_add': 'Add Frequent Recipient Address',
+    'ab.empty_eth': 'No saved Ethereum addresses',
+    'ab.empty_atos': 'No saved Atoshi addresses',
+    'ab.recent': 'Recent',
+    'ab.btn_close': 'Close',
+
+    // Transaction Modal
+    'tx.title_out': 'Atoshi → Ethereum Bridge',
+    'tx.title_in': 'Ethereum → Atoshi Bridge',
+    'tx.status_label': 'Current Status',
+    'tx.status_completed': 'Completed',
+    'tx.status_waiting': 'Waiting for Liquidity',
+    'tx.status_processing': 'In Progress',
+    'tx.est_time': 'Estimated Duration',
+    'tx.initiated_at': 'Initiated At',
+    'tx.recipient_addr': 'Recipient Address',
+    'tx.state_machine': 'Bridge State Machine Progress',
+    'tx.tx_hash': 'Transaction Hash:',
+    'tx.msg_id': 'Hyperlane Message:',
+    'tx.waiting_note': 'Message is securely verified. Releasing automatically once pool replenishes.',
+    'tx.btn_retry': 'Check & Retry',
+    'tx.disclaimer_note': 'Important: Once confirmed on source chain, assets are locked by smart contracts and cannot be cancelled or refunded.',
+    'tx.btn_support': 'Need help? Contact Support',
+    'tx.btn_done': 'Done',
+
+    // Transaction Steps
+    'step.out.1.name': 'Source Chain Submission',
+    'step.out.1.desc': 'Atoshi wallet signed transaction and locked ATOS in migration_pool contract.',
+    'step.out.2.name': 'Hyperlane Relayer Dispatch',
+    'step.out.2.desc': 'Hyperlane ISM validators signed checkpoint consensus and dispatched message.',
+    'step.out.3.name': 'Ethereum Contract Release',
+    'step.out.3.desc': 'Destination ERC20 contract verified message and minted/released ERC20 ATOS.',
+    'step.out.4.name': 'Bridge Finalized',
+    'step.out.4.desc': 'Assets successfully credited to recipient Ethereum address.',
+
+    'step.in.1.name': 'Ethereum ERC20 Lock',
+    'step.in.1.desc': 'ERC20 ATOS locked into Ethereum Bridge Portal smart contract.',
+    'step.in.2.name': 'Hyperlane Cross-Chain Verification',
+    'step.in.2.desc': 'Hyperlane Mailbox verified receipt proof and submitted interchain payload.',
+    'step.in.3.name': 'Atoshi Native Mint / Pool Release',
+    'step.in.3.desc': 'Atoshi chain verified payload and released 100x native ATOS.',
+    'step.in.4.name': 'Bridge In Complete',
+    'step.in.4.desc': 'Native ATOS credited to recipient Atoshi address.',
+
+    // History Drawer
+    'history.title': 'Bridge History',
+    'history.subtitle': 'Track state machine progress & on-chain proofs',
+    'history.tab_all': 'All ({count})',
+    'history.tab_out': 'Bridge Out (Atoshi → ETH)',
+    'history.tab_in': 'Bridge In (ETH → Atoshi)',
+    'history.empty_title': 'No Bridge Records Yet',
+    'history.empty_desc': 'Your cross-chain transactions will appear here in chronological order with full verification details.',
+    'history.out_title': 'Bridge Out to Ethereum',
+    'history.in_title': 'Bridge In to Atoshi',
+    'history.btn_back': 'Back',
+
+    // FAQ & Support Modal
+    'faq.title': 'Bridge Help & Support',
+    'faq.subtitle': 'Frequently Asked Questions & Customer Service',
+    'faq.support_title': 'Official 24/7 Technical Support',
+    'faq.online_badge': 'Support Online',
+    'faq.support_desc': 'If your transaction takes over 15 minutes or encounters an anomaly, copy the diagnosis info and contact our live support.',
+    'faq.btn_copied': 'Diagnosis Copied',
+    'faq.btn_copy': 'Copy Ticket Diagnosis Info',
+    'faq.faq_section_title': 'Frequently Asked Questions',
+    'faq.btn_return': 'Back to Bridge',
+    'faq.q1': 'Why was my bridge transfer rejected by rate limits?',
+    'faq.a1': 'To protect ecosystem security and prevent liquidity drainage, Atoshi implements a 5-tier risk control mechanism: 1,000 ATOS single minimum, 5% pool global daily cap, 2% per-address daily cap, 80% shared large quota, and crisis mode (< 10% pool). You can inspect real-time available quotas in the quota panel.',
+    'faq.q2': 'Why must the transfer amount be a multiple of 100?',
+    'faq.a2': 'Atoshi native coins and Ethereum ERC20 ATOS are pegged at a fixed 100:1 ratio on-chain. Since ERC20 cannot represent remainder fractions of 100 ATOS, the smart contract strictly enforces multiples of 100 to eliminate precision loss.',
+    'faq.q3': 'How long does bridging take, and why cannot it be cancelled?',
+    'faq.a3': 'Bridging typically completes in 1–5 minutes. It involves on-chain asset locking, Hyperlane multi-validator consensus signing, and target chain release. Once submitted on the source chain, the asset lock is irreversible.',
+    'faq.q4': 'What does "Waiting for Liquidity" mean during Bridge In?',
+    'faq.a4': 'Your locked ERC20 assets on Ethereum are 100% secure. If the Atoshi migration pool is temporarily replenishing native coins, the Hyperlane message is queued safely and will release immediately once the pool is funded.',
+
+    // Dev Scenario Bar
+    'dev.title': 'Scenario Simulator',
+    'dev.current': 'Current:',
+    'dev.toggle_open': 'Switch Scenario',
+    'dev.toggle_close': 'Collapse',
+    'dev.hint': 'Click presets to test 5-tier rate limits, crisis mode, liquidity queue, and bridge pause:',
+    'scenario.normal.title': 'Normal User (Sufficient Quota)',
+    'scenario.normal.desc': 'Full 5-tier limits available, pool liquidity is healthy (> 10%)',
+    'scenario.normal.badge': 'Standard',
+    'scenario.crisis_mode.title': 'Crisis Mode (Pool < 10%)',
+    'scenario.crisis_mode.desc': 'Emergency liquidity status, large transfers locked, ≤100,000 ATOS only',
+    'scenario.crisis_mode.badge': 'Tier 2 Active',
+    'scenario.large_exhausted.title': 'Large Quota Exhausted (80% Full)',
+    'scenario.large_exhausted.desc': 'Large quota exhausted, but small transfers still enjoy 20% reserved quota',
+    'scenario.large_exhausted.badge': 'Tier 4 Active',
+    'scenario.address_cap_exhausted.title': 'Personal Cap Exhausted (2% Full)',
+    'scenario.address_cap_exhausted.desc': 'Address has reached its 2% daily limit, no further transfers allowed today',
+    'scenario.address_cap_exhausted.badge': 'Tier 5 Active',
+    'scenario.global_cap_exhausted.title': 'Global Cap Exhausted (100% Full)',
+    'scenario.global_cap_exhausted.desc': 'Global 5% pool quota exhausted for today, resets at 00:00 UTC',
+    'scenario.global_cap_exhausted.badge': 'Tier 3 Active',
+    'scenario.low_balance.title': 'Low Balance (< 1,000 ATOS)',
+    'scenario.low_balance.desc': 'Wallet has 800 ATOS, below single transfer minimum threshold',
+    'scenario.low_balance.badge': 'Tier 1 Active',
+    'scenario.waiting_liquidity_in.title': 'Bridge In Liquidity Queue',
+    'scenario.waiting_liquidity_in.desc': 'ETH locked successfully, Atoshi pool awaits funding, shows safe queued state',
+    'scenario.waiting_liquidity_in.badge': 'Bridge In State',
+    'scenario.bridge_disabled.title': 'Bridge Maintenance Paused',
+    'scenario.bridge_disabled.desc': 'Interface shows maintenance state with bridge_enabled=false',
+    'scenario.bridge_disabled.badge': 'Circuit Breaker',
+
+    // Validation Errors
+    'err.insufficient_balance': 'Insufficient wallet balance (Available: {balance} ATOS)',
+    'err.below_minimum': 'Below minimum single transfer amount ({min} ATOS)',
+    'err.indivisible_amount': 'Amount must be a multiple of 100. Suggested: {lower} or {upper}',
+    'err.crisis_mode': 'Large transfers paused during liquidity crisis. Changing to ≤{threshold} ATOS passes instantly',
+    'err.address_cap_reached': 'Exceeds your personal daily remaining quota (Remaining: {remaining} ATOS)',
+    'err.large_quota_reached': 'Exceeds today’s large transfer quota. Change to ≤{threshold} ATOS to use reserved quota',
+    'err.daily_cap_reached': 'Exceeds global daily remaining quota (Remaining: {remaining} ATOS)',
+    'err.bridge_disabled': 'Bridge is under routine maintenance and temporarily paused.',
+    'err.invalid_address': 'Invalid recipient address format. Please double-check.',
+    'err.unconfirmed_disclaimer': 'Please accept the address ownership disclaimer.',
+  },
+
+  zh: {
+    // Header & Meta
+    'app.title': 'Atoshi 跨链桥',
+    'app.network': '主网节点',
+    'app.tab_bridge_out': '桥出 (Atoshi → ETH)',
+    'app.tab_bridge_in': '桥入 (ETH → Atoshi)',
+    'app.history_tooltip': '跨链记录',
+    'app.faq_tooltip': '帮助与常见问题',
+    'app.lang_toggle': '语言',
+    'app.footer_text': 'Atoshi Network × Ethereum · Hyperlane ISM',
+    'app.footer_sub': '嵌入式钱包安全环境 · 等宽数值排版',
+
+    // Maintenance Mode
+    'maint.title': '跨链功能维护中',
+    'maint.desc': '智能合约正在进行常规例行维护与流动性核验。维护期间暂停受理双向跨链请求，预计完成后自动恢复。',
+    'maint.btn_restore': '切回正常模式体验',
+
+    // Bridge Out View
+    'bridge_out.lock_label': '锁定 ATOS (Atoshi 链)',
+    'bridge_out.balance': '余额:',
+    'bridge_out.max': '最大',
+    'bridge_out.quick': '快捷:',
+    'bridge_out.small_cap': '小额',
+    'bridge_out.suggest_label': '建议改为:',
+    'bridge_out.adopt_btn': '采纳',
+    'bridge_out.receive_label': '以太坊主网将收到 (100:1 固定锚定)',
+    'bridge_out.erc20_unit': 'ERC20 ATOS',
+    'bridge_out.recipient_label': '接收地址 (Ethereum 主网)',
+    'bridge_out.address_book': '常用地址簿',
+    'bridge_out.recipient_placeholder': '0x 开头的 42 位以太坊地址 (不支持 ENS)',
+    'bridge_out.invalid_eth_addr': '请输入以 0x 开头的有效 42 位以太坊地址（不支持 ENS 域名）',
+    'bridge_out.encoding_title': '链上 32 字节编码（左侧补 12 个零字节）',
+    'bridge_out.disclaimer': '我确认接收地址是正确的以太坊私钥地址。资产将以 100:1 比例锁定，跨链过程通常需要 1–5 分钟，提交后不可撤回。',
+    'bridge_out.btn_submitting': '钱包签名并广播中...',
+    'bridge_out.btn_maint': '跨链功能维护中',
+    'bridge_out.btn_invalid_addr': '请输入有效以太坊地址',
+    'bridge_out.btn_check_disclaimer': '请勾选确认声明',
+    'bridge_out.btn_submit': '确认跨链转出 (Atoshi → ETH)',
+    'bridge_out.btn_invalid_amount': '请输入合法转账金额',
+    'bridge_out.security_note': 'Hyperlane Interchain Security Module · 链上智能合约保障',
+
+    // Bridge In View
+    'bridge_in.lock_label': '锁定 ERC20 ATOS (Ethereum 主网)',
+    'bridge_in.balance': '余额:',
+    'bridge_in.max': '最大',
+    'bridge_in.exceed_balance': '超出以太坊钱包当前可用 ERC20 余额（当前可用: {balance}）',
+    'bridge_in.receive_label': 'Atoshi 主网将收到 (1 ERC20 = 100 原生 ATOS)',
+    'bridge_in.rules_title': '桥入规则（无限额、无频控）',
+    'bridge_in.rules_badge': '自由放行',
+    'bridge_in.rules_desc': '以太坊桥入 Atoshi 不受五层限流规则约束，任何金额均可自由锁币转入。',
+    'bridge_in.liquidity_title': '流动性安全排队机制',
+    'bridge_in.liquidity_desc': '若 Atoshi 资金池临时补充期，跨链消息将自动保留并进入「等待流动性补充中」排队放款状态，资产绝对安全，绝不会丢币。',
+    'bridge_in.faq_link': '疑问解答',
+    'bridge_in.recipient_label': '接收地址 (Atoshi 主网)',
+    'bridge_in.fill_my_addr': '填入我的地址',
+    'bridge_in.recipient_placeholder': '以 atoshi1 开头的 Bech32 地址',
+    'bridge_in.invalid_atoshi_addr': '请输入以 atoshi1 开头的合法 Atoshi 主网地址',
+    'bridge_in.disclaimer': '我确认这是由我控制的 Atoshi 原生地址。以太坊跨链交易提交后不可撤回。',
+    'bridge_in.btn_submitting': '唤起以太坊钱包签名中...',
+    'bridge_in.btn_enter_amount': '请输入转账金额',
+    'bridge_in.btn_insufficient_bal': '以太坊 ERC20 余额不足',
+    'bridge_in.btn_submit': '以太坊签名并跨链放款 (ETH → Atoshi)',
+    'bridge_in.security_note': '以太坊交易将在链上锁定 ERC20 · Atoshi 链接收 Hyperlane 凭证后自动放款',
+
+    // Quota Panel
+    'quota.crisis_title': '流动性紧急管控中：',
+    'quota.crisis_desc': '资金池余额处于低位（< 10%），系统已临时锁定大额通道，暂时只受理 ≤100,000 ATOS 的小额转账。',
+    'quota.max_transferable': '当前可转上限',
+    'quota.daily_reset': '今日额度重置',
+    'quota.global_cap': '全网今日额度 (5% 日上限)',
+    'quota.large_quota': '大额配额 (80% 共享)',
+    'quota.large_badge': '大额',
+    'quota.locked_crisis': '已锁定 (危机模式)',
+    'quota.address_cap': '个人今日额度 (2% 上限)',
+    'quota.min_transfer': '单笔下限:',
+    'quota.multiples_100': '需 100 倍数',
+    'quota.rules_details': '限流细则',
+    'quota.rules_tooltip': '查看五层限流计算规则',
+
+    // 5-Tier Rules Modal
+    'rules.title': '桥出「五层限流」机制',
+    'rules.subtitle': '链上原生安全风控系统',
+    'rules.peg_title': '锚定汇率固定写死在链上',
+    'rules.peg_desc': '100 ATOS = 1 ERC20 ATOS。此比例由智能合约不可篡改锁定，无任何滑点与预估手续费波动。',
+    'rules.order_title': '五层叠加判定顺序（取各层最小值）',
+    'rules.tier1_title': '1. 单笔转账下限',
+    'rules.tier1_val': '1,000 ATOS',
+    'rules.tier1_desc': '低于此数链上直接拒绝，以覆盖单笔 Hyperlane 跨链验证消息的 Gas 开销。',
+    'rules.tier2_title': '2. 流动性危机模式',
+    'rules.tier2_active': '🚨 当前已激活',
+    'rules.tier2_inactive': '池子 < 10% 时触发',
+    'rules.tier2_desc': '当 migration_pool 余额低于总量的 10% 时，系统自动锁定大额通道，仅允许 ≤ 100,000 ATOS 的小额转账。',
+    'rules.tier3_title': '3. 全网全局日上限',
+    'rules.tier3_val': '5% 资金池 / 日',
+    'rules.tier3_desc': '全网所有人共享每日额度：min(5×10²⁷ ATOS, 资金池余额 × 5%)，每日 00:00 UTC 重置。',
+    'rules.tier4_title': '4. 大额限制与小额预留配额',
+    'rules.tier4_val': '20% 小额专享',
+    'rules.tier4_desc': '小额（≤ 100,000 ATOS）享有全局额度 20% 的专属保护配额；大额最多仅能用掉 80%，防止巨鲸单笔耗尽全网额度。',
+    'rules.tier5_title': '5. 单地址单日上限',
+    'rules.tier5_val': '全网日额度 2%',
+    'rules.tier5_desc': '每个 Atoshi 地址独立计算单日累计额度，不可超过全局日额度的 2%，防止单地址挤兑。',
+    'rules.tier6_title': '6. 100 的整数倍要求',
+    'rules.tier6_val': '金额 % 100 == 0',
+    'rules.tier6_desc': '因为按 100:1 折算为 ERC20 时，余数无法在以太坊链上表示，非 100 倍数将被链上直接拒绝，绝不静默截断。',
+    'rules.btn_understand': '我已了解',
+
+    // Address Book Modal
+    'ab.title_eth': '以太坊地址簿',
+    'ab.title_atos': 'Atoshi 地址簿',
+    'ab.subtitle': '快速填入常用收款地址',
+    'ab.add_new': '添加新地址',
+    'ab.label_name': '备注标签 (如: 我的币安 / 硬件钱包)',
+    'ab.label_placeholder': '例如: 个人 MetaMask',
+    'ab.eth_addr_label': '以太坊地址 (0x...)',
+    'ab.atos_addr_label': 'Atoshi 地址 (atoshi1...)',
+    'ab.err_label_required': '请输入地址备注名称',
+    'ab.err_invalid_eth': '请输入有效的 42 位以太坊地址（0x 开头）',
+    'ab.err_invalid_atos': '请输入有效的 Atoshi 地址（atoshi1 开头）',
+    'ab.btn_cancel': '取消',
+    'ab.btn_save': '保存地址',
+    'ab.btn_trigger_add': '添加常用收款地址',
+    'ab.empty_eth': '暂无保存的以太坊地址',
+    'ab.empty_atos': '暂无保存的 Atoshi 地址',
+    'ab.recent': '最近使用',
+    'ab.btn_close': '关闭',
+
+    // Transaction Modal
+    'tx.title_out': 'Atoshi → 以太坊 跨链',
+    'tx.title_in': '以太坊 → Atoshi 跨链',
+    'tx.status_label': '当前跨链状态',
+    'tx.status_completed': '已完成跨链',
+    'tx.status_waiting': '等待流动性补充中',
+    'tx.status_processing': '跨链流转中',
+    'tx.est_time': '预计耗时区间',
+    'tx.initiated_at': '发起时间',
+    'tx.recipient_addr': '接收地址',
+    'tx.state_machine': '跨链状态机推进',
+    'tx.tx_hash': '交易哈希:',
+    'tx.msg_id': 'Hyperlane Message:',
+    'tx.waiting_note': '消息已安全就绪，池子补充后自动放款',
+    'tx.btn_retry': '检查重投',
+    'tx.disclaimer_note': '重要须知：跨链交易一旦在源链确认，智能合约已完成资产锁定，任何人都无法中途取消或撤回。',
+    'tx.btn_support': '遇到问题？联系客服',
+    'tx.btn_done': '完成',
+
+    // Transaction Steps
+    'step.out.1.name': '源链交易锁定',
+    'step.out.1.desc': 'Atoshi 钱包已签署交易，ATOS 原生币已锁定进入 migration_pool 智能合约。',
+    'step.out.2.name': 'Hyperlane 跨链中继派发',
+    'step.out.2.desc': 'Hyperlane ISM 多验证人节点完成检查点聚合签名，生成 Merkle 路由证明。',
+    'step.out.3.name': '以太坊合约验证放款',
+    'step.out.3.desc': '以太坊 ERC20 桥接合约验证凭证成功，铸造/放款 ERC20 ATOS 代币。',
+    'step.out.4.name': '跨链全部完成',
+    'step.out.4.desc': '资产已成功到账至您的以太坊收款地址。',
+
+    'step.in.1.name': '以太坊锁定 ERC20',
+    'step.in.1.desc': '以太坊钱包签署交易，ERC20 ATOS 代币锁定进入以太坊 Bridge Portal。',
+    'step.in.2.name': 'Hyperlane 跨链消息派发',
+    'step.in.2.desc': 'Hyperlane Mailbox 验证交易收据并派发跨链消息体。',
+    'step.in.3.name': 'Atoshi 链原生铸造/放款',
+    'step.in.3.desc': 'Atoshi 链接收消息并按 1:100 比例释放原生 ATOS 币。',
+    'step.in.4.name': '桥入完成到账',
+    'step.in.4.desc': '原生 ATOS 币已划转至您的 Atoshi 钱包地址。',
+
+    // History Drawer
+    'history.title': '跨链历史记录',
+    'history.subtitle': '查看跨链推进与链上凭证',
+    'history.tab_all': '全部 ({count})',
+    'history.tab_out': '桥出 (Atoshi ➔ ETH)',
+    'history.tab_in': '桥入 (ETH ➔ Atoshi)',
+    'history.empty_title': '暂无跨链记录',
+    'history.empty_desc': '您发起的跨链转账将在这里按时间顺序展示，包含全流程状态机与 Hyperlane 消息凭证。',
+    'history.out_title': '桥出至以太坊',
+    'history.in_title': '桥入至 Atoshi',
+    'history.btn_back': '返回',
+
+    // FAQ & Support Modal
+    'faq.title': '跨链帮助与客服',
+    'faq.subtitle': '常见问题解答与人工服务',
+    'faq.support_title': '钱包官方 7×24h 专属技术支持',
+    'faq.online_badge': '客服在线',
+    'faq.support_desc': '若您的跨链交易超过 15 分钟仍未完成，或遇到异常状态，请复制以下工单信息并发送给在线客服。',
+    'faq.btn_copied': '工单信息已复制',
+    'faq.btn_copy': '复制工单诊断信息',
+    'faq.faq_section_title': '常见跨链疑问',
+    'faq.btn_return': '返回跨链桥',
+    'faq.q1': '为什么我的转账提示被限流拒绝了？',
+    'faq.a1': '为了保障全网资产安全与防止瞬间挤兑，Atoshi 链设置了五层原生限流规则：包含单笔最低 1,000 ATOS、全网日上限 5%、单地址日上限 2%、大额 80% 共享配额以及资金池 < 10% 时的危机模式。在页面额度面板中可实时查看当前可转金额。',
+    'faq.q2': '为什么金额必须是 100 的整数倍？',
+    'faq.a2': 'Atoshi 原生币与以太坊 ERC20 ATOS 在链上按固定 100:1 汇率锚定。因以太坊 ERC20 无法表示除以 100 后的余数，为避免资产精度损失，智能合约直接拒绝非 100 倍数的转账。',
+    'faq.q3': '跨链一般需要多久到账？为什么不能取消？',
+    'faq.a3': '通常在 1–5 分钟内完成。跨链流程涉及源链资产锁定、Hyperlane 验证节点签名共识及目标链放款三个不可逆阶段，因此一旦在链上提交锁定，中途无法撤回或取消。',
+    'faq.q4': '桥入（以太坊 → Atoshi）显示“等待流动性补充”是什么意思？',
+    'faq.a4': '以太坊锁定的资产绝对安全。如果 Atoshi 端 migration_pool 暂未补充足够原生币，Hyperlane 消息会自动排队，待池子补充后一键重投即可自动放款至您的 Atoshi 地址。',
+
+    // Dev Scenario Bar
+    'dev.title': '测试场景模拟器',
+    'dev.current': '当前:',
+    'dev.toggle_open': '切换测试场景',
+    'dev.toggle_close': '收起',
+    'dev.hint': '点击以下预设场景，可一键复现链上五层限流拦截、危机模式、以太坊流动性排队及跨链暂停：',
+    'scenario.normal.title': '正常用户 (额度充裕)',
+    'scenario.normal.desc': '五层限流额度充裕，池子流动性健康（> 10%）',
+    'scenario.normal.badge': '标准状态',
+    'scenario.crisis_mode.title': '危机模式 (池子 < 10%)',
+    'scenario.crisis_mode.desc': '流动性紧急状态，大额通道锁定，仅限 ≤100,000 ATOS',
+    'scenario.crisis_mode.badge': '五层第2层',
+    'scenario.large_exhausted.title': '大额配额用尽 (80% 满)',
+    'scenario.large_exhausted.desc': '大额额度归零，但小额仍有 20% 专属配额可用',
+    'scenario.large_exhausted.badge': '五层第4层',
+    'scenario.address_cap_exhausted.title': '个人日上限用尽 (2% 满)',
+    'scenario.address_cap_exhausted.desc': '该地址今日已转满全网 2% 额度，不可再转',
+    'scenario.address_cap_exhausted.badge': '五层第5层',
+    'scenario.global_cap_exhausted.title': '全网日总额度用尽 (100% 满)',
+    'scenario.global_cap_exhausted.desc': '今日全网 5% 额度全部被抢光，需等待 00:00 重置',
+    'scenario.global_cap_exhausted.badge': '五层第3层',
+    'scenario.low_balance.title': '低余额账户 (< 1,000 ATOS)',
+    'scenario.low_balance.desc': '钱包余额仅 800 ATOS，低于单笔最低门槛',
+    'scenario.low_balance.badge': '五层第1层',
+    'scenario.waiting_liquidity_in.title': '桥入等待流动性补充',
+    'scenario.waiting_liquidity_in.desc': '以太坊锁币成功，但 Atoshi 池子等待补充，展示安全排队中间态',
+    'scenario.waiting_liquidity_in.badge': '桥入挂起态',
+    'scenario.bridge_disabled.title': '跨链维护暂停 (bridge_enabled=false)',
+    'scenario.bridge_disabled.desc': '整个页面置灰禁用，提示跨链功能尚未开启',
+    'scenario.bridge_disabled.badge': '全局熔断',
+
+    // Validation Errors
+    'err.insufficient_balance': '钱包余额不足（当前可用：{balance} ATOS）',
+    'err.below_minimum': '低于单笔最低限额（{min} ATOS）',
+    'err.indivisible_amount': '金额需为 100 的整数倍，建议改为 {lower} 或 {upper}',
+    'err.crisis_mode': '流动性紧张模式下大额已暂停，改为 ≤{threshold} ATOS 可立即通过',
+    'err.address_cap_reached': '超出你今日个人剩余额度（剩余 {remaining} ATOS）',
+    'err.large_quota_reached': '超出今日大额可用配额，改为 ≤{threshold} ATOS 可享小额专属配额立即通过',
+    'err.daily_cap_reached': '超出全网今日总剩余额度（剩余 {remaining} ATOS）',
+    'err.bridge_disabled': '跨链桥系统正在例行维护中，跨链通道暂未开启。',
+    'err.invalid_address': '输入的收款地址格式不正确，请仔细核对。',
+    'err.unconfirmed_disclaimer': '请勾选确认收款地址所有权声明。',
+  },
+};
+
+const I18nContext = createContext<I18nContextType>({
+  lang: 'en',
+  setLang: () => {},
+  t: (key: string) => key,
+});
+
+export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [lang, setLangState] = useState<Language>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return (saved === 'zh' || saved === 'en') ? saved : 'en'; // Default is English
+  });
+
+  const setLang = (newLang: Language) => {
+    setLangState(newLang);
+    try {
+      localStorage.setItem(STORAGE_KEY, newLang);
+    } catch {
+      // ignore
+    }
+  };
+
+  const t = (key: string, params?: Record<string, string | number>): string => {
+    const currentDict = translations[lang] || translations.en;
+    let text = (currentDict as Record<string, string>)[key] || (translations.en as Record<string, string>)[key] || key;
+    if (params) {
+      Object.entries(params).forEach(([pKey, pVal]) => {
+        text = text.replace(new RegExp(`\\{${pKey}\\}`, 'g'), String(pVal));
+      });
+    }
+    return text;
+  };
+
+  return (
+    <I18nContext.Provider value={{ lang, setLang, t }}>
+      {children}
+    </I18nContext.Provider>
+  );
+};
+
+export const useI18n = () => useContext(I18nContext);
