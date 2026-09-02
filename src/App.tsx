@@ -13,7 +13,11 @@ import {
 } from './types';
 import {
   bridgeService,
+  FALLBACK_ATOSHI_ADDRESS,
+  IS_CHAIN_MODE,
 } from './services/bridgeApi';
+import { useWallet } from './wallet/useWallet';
+import { WalletBar } from './components/WalletBar';
 import { Header } from './components/Header';
 import { BridgeOutView } from './components/BridgeOutView';
 import { BridgeInView } from './components/BridgeInView';
@@ -36,7 +40,8 @@ export default function App() {
   const [balanceAtos, setBalanceAtos] = useState<number>(3_850_000);
   const [balanceErc20, setBalanceErc20] = useState<number>(25_000);
   const [recipientEth, setRecipientEth] = useState<string>('0x71C8F3b146437930f78FEA093eD414A0A45331Eb');
-  const [recipientAtoshi, setRecipientAtoshi] = useState<string>(bridgeService.getCurrentAddress());
+  const [recipientAtoshi, setRecipientAtoshi] = useState<string>(FALLBACK_ATOSHI_ADDRESS);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modal 控制
   const [isRulesModalOpen, setIsRulesModalOpen] = useState<boolean>(false);
@@ -47,22 +52,30 @@ export default function App() {
   const [activeRecord, setActiveRecord] = useState<BridgeRecord | null>(null);
   const [selectedTxIdForSupport, setSelectedTxIdForSupport] = useState<string | undefined>(undefined);
 
-  const currentAddress = bridgeService.getCurrentAddress();
+  // 钱包给的是 0x 地址，Cosmos REST 的查询路径只认 atoshi1…，useWallet 里已转好。
+  // 没连钱包时退回兜底地址，让页面有东西可渲染。
+  const wallet = useWallet();
+  const currentAddress = wallet.bech32Address || FALLBACK_ATOSHI_ADDRESS;
+  const currentEthAddress = wallet.address || '';
 
   // 加载数据
   const fetchData = useCallback(async () => {
     try {
-      const [fetchedParams, fetchedLimits, fetchedHistory] = await Promise.all([
+      const [fetchedParams, fetchedLimits, fetchedHistory, atos, erc20] = await Promise.all([
         bridgeService.getBridgeParams(),
         bridgeService.getBridgeLimits(currentAddress),
         bridgeService.getBridgeHistory(currentAddress),
+        bridgeService.getUserBalanceAtos(currentAddress),
+        // ERC20 余额要连钱包才查得到，没连时不报错、显示 0
+        bridgeService.getUserBalanceErc20().catch(() => 0),
       ]);
       setParams(fetchedParams);
       setLimits(fetchedLimits);
       setRecords(fetchedHistory.list);
       setAddressBook(bridgeService.getAddressBook());
-      setBalanceAtos(bridgeService.getUserBalanceAtos());
-      setBalanceErc20(bridgeService.getUserBalanceErc20());
+      setBalanceAtos(atos);
+      setBalanceErc20(erc20);
+      setLoadError(null);
 
       // 如果当前正打开某个交易弹窗，更新其状态
       if (activeRecord) {
@@ -71,14 +84,19 @@ export default function App() {
           setActiveRecord(updated);
         }
       }
-    } catch {
-      // ignore
+    } catch (e: any) {
+      // 不再静默忽略。mock 模式下这里几乎不会触发；真链模式下节点连不上、
+      // 跨域被拦、REST 没开，全都走到这儿 —— 吞掉的话页面只是不更新，
+      // 看起来一切正常，是最难排查的一种故障。
+      setLoadError(e?.message || '读取链上数据失败');
     }
   }, [currentAddress, activeRecord]);
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 2500);
+    // mock 的状态机靠这个轮询自动步进，所以要快。真链模式下没有东西会自己
+    // 步进，2.5 秒一轮就是每秒两次 REST 请求的纯浪费，还容易被限流。
+    const interval = setInterval(fetchData, IS_CHAIN_MODE ? 15000 : 2500);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -105,7 +123,7 @@ export default function App() {
     setIsSubmitting(true);
     try {
       const res = await bridgeService.submitBridgeIn({
-        sender: bridgeService.getCurrentEthAddress(),
+        sender: currentEthAddress,
         recipient_atoshi_address: recipientAtoshi,
         amount_erc20: amountErc20,
       });
@@ -158,6 +176,18 @@ export default function App() {
           }}
           pendingCount={pendingCount}
           bridgeEnabled={params?.bridge_enabled ?? true}
+        />
+
+        <WalletBar
+          side={activeDirection === 'out' ? 'atoshi' : 'ethereum'}
+          isConnected={wallet.isConnected}
+          isConnecting={wallet.isConnecting}
+          isSwitching={wallet.isSwitching}
+          hasProvider={wallet.hasProvider}
+          isOnRightChain={wallet.isOnChainFor(activeDirection === 'out' ? 'atoshi' : 'ethereum')}
+          loadError={loadError}
+          onConnect={wallet.connect}
+          onSwitch={() => wallet.switchTo(activeDirection === 'out' ? 'atoshi' : 'ethereum')}
         />
 
         {/* 主体内容 */}

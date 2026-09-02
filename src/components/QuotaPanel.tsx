@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, ChevronRight, HelpCircle, Flame } from 'lucide-react';
+import { ShieldAlert, ChevronRight, HelpCircle, Flame, Info } from 'lucide-react';
 import { BridgeLimits, BridgeParams } from '../types';
 import { formatNumber } from '../utils/bridgeValidation';
 import { useI18n } from '../i18n';
@@ -72,6 +72,23 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
       }`}
     >
       {/* 危机模式橙色紧急提示条 */}
+      {/*
+        已用量未知时必须说出来。链上有这三个数（bridgeadapter keeper 的
+        GetRateLimitState / GetAddressUsage），但 query.proto 没暴露查询，
+        所以 *_remaining 只能等于 *_total。不提示的话用户会以为额度是满的，
+        按满额填金额，然后在链上被限流拒掉，且看不出原因。
+      */}
+      {!limits.usage_available && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+          <p className="text-[11px] leading-snug text-blue-800">
+            下面显示的是<strong>每日上限</strong>，不含今日已用量 ——
+            链上暂未提供已用量查询。实际可转金额可能低于此处显示，
+            以提交时链上的判定为准。
+          </p>
+        </div>
+      )}
+
       {limits.crisis_mode && (
         <div
           id="crisis-mode-banner"
@@ -131,7 +148,13 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
               {t('quota.tier_global')}
             </span>
             <span className="font-mono text-gray-700">
-              <span className="font-bold text-black">{formatNumber(limits.global_remaining)}</span> / {formatNumber(limits.global_total)}
+              {limits.usage_available ? (
+                <>
+                  <span className="font-bold text-black">{formatNumber(limits.global_remaining)}</span> / {formatNumber(limits.global_total)}
+                </>
+              ) : (
+                <span className="font-bold text-black">{formatNumber(limits.global_total)}</span>
+              )}
             </span>
           </div>
           <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -168,7 +191,13 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
                 <span className="text-amber-800 font-bold">{t('quota.locked_crisis')}</span>
               ) : (
                 <>
-                  <span className="font-bold text-black">{formatNumber(limits.large_remaining)}</span> / {formatNumber(limits.large_total)}
+                  {limits.usage_available ? (
+                    <>
+                      <span className="font-bold text-black">{formatNumber(limits.large_remaining)}</span> / {formatNumber(limits.large_total)}
+                    </>
+                  ) : (
+                    <span className="font-bold text-black">{formatNumber(limits.large_total)}</span>
+                  )}
                 </>
               )}
             </span>
@@ -194,7 +223,13 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
           <div className="flex justify-between text-[10px] uppercase font-bold text-gray-400">
             <span>{t('quota.tier_address')}</span>
             <span className="font-mono text-gray-700">
-              <span className="font-bold text-black">{formatNumber(limits.address_remaining)}</span> / {formatNumber(limits.address_total)}
+              {limits.usage_available ? (
+                <>
+                  <span className="font-bold text-black">{formatNumber(limits.address_remaining)}</span> / {formatNumber(limits.address_total)}
+                </>
+              ) : (
+                <span className="font-bold text-black">{formatNumber(limits.address_total)}</span>
+              )}
             </span>
           </div>
           <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">

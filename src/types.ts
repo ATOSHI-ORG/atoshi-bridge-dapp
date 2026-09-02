@@ -27,6 +27,20 @@ export interface BridgeLimits {
   address_total: number; // 当前地址今日总额度
   crisis_mode: boolean; // 是否处于危机模式（流动性 < 10%）
   resets_at: number; // 今日额度重置时间戳 (ms)
+
+  /**
+   * 「今日已用量」这三个 remaining 字段是不是真实数据。
+   *
+   * 链上确实记着这三个数（bridgeadapter keeper 的 GetRateLimitState /
+   * GetAddressUsage），但 query.proto 只暴露了 params 和 receipt_state 两个查询，
+   * 没有把它们导出来。所以真链模式下 *_remaining 拿不到，只能等于 *_total。
+   *
+   * false 时 UI 必须标明「已用量未知」，不能让用户以为额度是满的 —— 他会按满额
+   * 去填金额，然后在链上被限流拒掉，而且看不出为什么。
+   *
+   * 修法是给链上加一个 Limits 查询，见 README「已知待办」。
+   */
+  usage_available: boolean;
 }
 
 export type BridgeDirection = 'out' | 'in';

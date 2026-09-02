@@ -1,6 +1,0 @@
-{
-  "name": "Atoshi 跨链桥",
-  "description": "Atoshi 链与以太坊双向跨链桥，支持五层限流额度预检、状态机追踪与实时校验",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
