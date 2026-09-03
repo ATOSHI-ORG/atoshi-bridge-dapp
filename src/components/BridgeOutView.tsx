@@ -110,10 +110,16 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
     { label: '100,000', value: 100000, isSmallCap: true },
   ];
 
+  // 桌面两栏：左边是表单（金额 → 方向 → 收款地址 → 提交），右边常驻额度面板。
+  // 用 col-start 显式定位而不是改 DOM 顺序 —— 手机上顺序必须保持
+  // 「输入金额 → 紧跟着看额度」，那是这个页面的核心交互。
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6 lg:space-y-0"
+    >
       {/* 1. 金额输入与余额卡片 */}
-      <div className="mt-2">
+      <div className="mt-2 lg:col-start-1">
         <div className="flex justify-between items-end mb-2">
           <label htmlFor="input-amount-atos" className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             {t('bridge_out.lock_label')}
@@ -203,7 +209,8 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
         </div>
       </div>
 
-      {/* 2. 额度面板（常驻在输入框正下方，包含五层限流进度与你现在最多能转） */}
+      {/* 2. 额度面板。手机上紧跟金额输入；桌面上移到右栏并吸顶 */}
+      <div className="lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6">
       <QuotaPanel
         limits={limits}
         params={params}
@@ -211,9 +218,10 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
         highlightTier={validationResult.highlightTier}
         onOpenRulesModal={onOpenRulesModal}
       />
+      </div>
 
       {/* 3. 中间方向转换示意分割线 */}
-      <div className="flex items-center justify-center py-1">
+      <div className="flex items-center justify-center py-1 lg:col-start-1">
         <div className="h-[1px] bg-gray-200 flex-1"></div>
         <div className="mx-4 bg-gray-100 rounded-full p-2 text-gray-500">
           <ArrowRight className="w-4 h-4" />
@@ -222,7 +230,7 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
       </div>
 
       {/* 4. 收款地址输入卡片 */}
-      <div className="space-y-2">
+      <div className="space-y-2 lg:col-start-1">
         <div className="flex justify-between items-center mb-1">
           <label htmlFor="input-recipient-eth" className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             {t('bridge_out.recipient_label')}
@@ -331,7 +339,7 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
       </div>
 
       {/* 5. 提交按钮 */}
-      <div className="pt-2">
+      <div className="pt-2 lg:col-start-1">
         <button
           type="submit"
           id="btn-submit-bridge-out"

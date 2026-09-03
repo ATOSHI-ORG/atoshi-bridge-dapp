@@ -161,8 +161,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F2F4F7] flex flex-col items-center justify-start sm:justify-center py-0 sm:py-6 px-0 sm:px-4 selection:bg-black selection:text-white">
-      {/* 居中移动端卡片容器（375–420px 优先） */}
-      <div className="w-full max-w-[420px] bg-white min-h-screen sm:min-h-0 sm:rounded-2xl shadow-2xl border border-gray-200 flex flex-col relative overflow-hidden">
+      {/*
+        自适应外壳。
+        手机（默认）：420px 竖屏卡片，铺满屏幕高度。
+        桌面（lg 起）：加宽到 1040px，内容分两栏 —— 表单在左，额度面板在右。
+        分栏由 BridgeOutView 自己的 lg:grid 负责，这里只放开宽度。
+      */}
+      <div className="w-full max-w-[420px] bg-white min-h-screen sm:min-h-0 sm:rounded-2xl shadow-2xl border border-gray-200 flex flex-col relative overflow-hidden lg:max-w-[1040px]">
         {/* 顶部导航与方向切换 */}
         <Header
           currentAddress={currentAddress}
@@ -191,7 +196,7 @@ export default function App() {
         />
 
         {/* 主体内容 */}
-        <main className="p-6 space-y-4 flex-1">
+        <main className="p-6 space-y-4 flex-1 lg:px-10 lg:py-8">
           {/* 跨链功能暂停全屏遮罩状态 */}
           {isBridgeDisabled ? (
             <div

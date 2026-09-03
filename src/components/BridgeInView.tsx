@@ -78,7 +78,7 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 lg:mx-auto lg:max-w-[560px]">
       {/* 1. 金额输入与余额卡片 */}
       <div className="mt-2">
         <div className="flex justify-between items-end mb-2">
