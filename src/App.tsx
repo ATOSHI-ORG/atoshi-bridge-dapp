@@ -9,7 +9,6 @@ import {
   BridgeLimits,
   BridgeRecord,
   BridgeDirection,
-  AddressBookItem,
 } from './types';
 import {
   bridgeService,
@@ -22,7 +21,6 @@ import { Header } from './components/Header';
 import { BridgeOutView } from './components/BridgeOutView';
 import { BridgeInView } from './components/BridgeInView';
 import { RulesExplanationModal } from './components/RulesExplanationModal';
-import { AddressBookModal } from './components/AddressBookModal';
 import { TransactionModal } from './components/TransactionModal';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { FAQAndSupportModal } from './components/FAQAndSupportModal';
@@ -35,7 +33,6 @@ export default function App() {
   const [limits, setLimits] = useState<BridgeLimits | null>(null);
   const [records, setRecords] = useState<BridgeRecord[]>([]);
   const [activeDirection, setActiveDirection] = useState<BridgeDirection>('out');
-  const [addressBook, setAddressBook] = useState<AddressBookItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   // 初始值必须是「空」而不是演示数据。
   //
@@ -51,8 +48,6 @@ export default function App() {
 
   // Modal 控制
   const [isRulesModalOpen, setIsRulesModalOpen] = useState<boolean>(false);
-  const [isAddressBookOpen, setIsAddressBookOpen] = useState<boolean>(false);
-  const [addressBookNetwork, setAddressBookNetwork] = useState<'ethereum' | 'atoshi'>('ethereum');
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState<boolean>(false);
   const [isFAQModalOpen, setIsFAQModalOpen] = useState<boolean>(false);
   const [activeRecord, setActiveRecord] = useState<BridgeRecord | null>(null);
@@ -80,7 +75,6 @@ export default function App() {
       ]);
       setParams(fetchedParams);
       setLimits(fetchedLimits);
-      setAddressBook(bridgeService.getAddressBook());
 
       if (currentAddress) {
         const [fetchedHistory, atos, erc20] = await Promise.all([
@@ -175,16 +169,7 @@ export default function App() {
     await fetchData();
   };
 
-  // 打开地址簿
-  const handleOpenAddressBook = (network: 'ethereum' | 'atoshi') => {
-    setAddressBookNetwork(network);
-    setIsAddressBookOpen(true);
-  };
 
-  const handleAddNewAddress = (label: string, address: string, network: 'ethereum' | 'atoshi') => {
-    bridgeService.addAddressBookItem(label, address, network);
-    setAddressBook(bridgeService.getAddressBook());
-  };
 
   const pendingCount = records.filter(
     (r) => r.status !== 'completed' && r.status !== 'failed'
@@ -272,14 +257,12 @@ export default function App() {
               limits={limits}
               userBalance={balanceAtos}
               userAddress={currentAddress}
-              addressBook={addressBook}
               recipientEth={recipientEth}
               onRecipientEthChange={setRecipientEth}
               isSubmitting={isSubmitting}
               isConnected={isConnected}
               onSubmit={handleSubmitBridgeOut}
               onOpenRulesModal={() => setIsRulesModalOpen(true)}
-              onOpenAddressBook={() => handleOpenAddressBook('ethereum')}
             />
           ) : (
             /* 桥入视图（ETH ➔ Atoshi，无限流，等待流动性补充状态机） */
@@ -289,11 +272,9 @@ export default function App() {
               currentAtoshiAddress={currentAddress}
               recipientAtoshi={recipientAtoshi}
               onRecipientAtoshiChange={setRecipientAtoshi}
-              addressBook={addressBook}
               isSubmitting={isSubmitting}
               isConnected={isConnected}
               onSubmit={handleSubmitBridgeIn}
-              onOpenAddressBook={() => handleOpenAddressBook('atoshi')}
               onOpenFAQ={() => {
                 setSelectedTxIdForSupport(undefined);
                 setIsFAQModalOpen(true);
@@ -321,20 +302,7 @@ export default function App() {
       />
 
       {/* 2. 常用地址簿弹窗 */}
-      <AddressBookModal
-        isOpen={isAddressBookOpen}
-        onClose={() => setIsAddressBookOpen(false)}
-        network={addressBookNetwork}
-        addressList={addressBook}
-        onSelectAddress={(addr) => {
-          if (addressBookNetwork === 'ethereum') {
-            setRecipientEth(addr);
-          } else {
-            setRecipientAtoshi(addr);
-          }
-        }}
-        onAddNewAddress={handleAddNewAddress}
-      />
+
 
       {/* 3. 四步状态机进度追踪弹窗 */}
       <TransactionModal

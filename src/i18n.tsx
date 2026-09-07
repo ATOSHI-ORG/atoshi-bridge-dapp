@@ -72,7 +72,7 @@ export const translations = {
     'bridge_in.btn_submitting': 'Awaiting Ethereum wallet signature...',
     'bridge_in.btn_enter_amount': 'Enter transfer amount',
     'bridge_in.btn_insufficient_bal': 'Insufficient ERC20 balance',
-    'bridge_in.btn_submit': 'Sign & Bridge (ETH → Atoshi)',
+    'bridge_in.btn_submit': 'Confirm Bridge In (ETH → Atoshi)',
     'bridge_in.security_note': 'Locked on Ethereum · Atoshi automatically releases ATOS upon Hyperlane verification',
 
     // Quota Panel
@@ -275,7 +275,7 @@ export const translations = {
     'bridge_in.address_book': 'Address book',
     'bridge_in.atos_unit': 'native ATOS',
     'bridge_in.quick': 'Quick',
-    'bridge_in.invalid_addr': 'Not a valid Atoshi address.',
+    'bridge_in.invalid_addr': 'Invalid address',
     'bridge_in.insufficient_balance': 'Amount exceeds your ERC20 balance.',
     'bridge_in.btn_insufficient': 'Insufficient balance',
     'bridge_in.btn_invalid_addr': 'Check the recipient address',
@@ -402,7 +402,7 @@ export const translations = {
     'bridge_in.btn_submitting': '唤起以太坊钱包签名中...',
     'bridge_in.btn_enter_amount': '请输入转账金额',
     'bridge_in.btn_insufficient_bal': '以太坊 ERC20 余额不足',
-    'bridge_in.btn_submit': '以太坊签名并跨链放款 (ETH → Atoshi)',
+    'bridge_in.btn_submit': '确认跨链转入 (ETH → Atoshi)',
     'bridge_in.security_note': '以太坊交易将在链上锁定 ERC20 · Atoshi 链接收 Hyperlane 凭证后自动放款',
 
     // Quota Panel
@@ -605,7 +605,7 @@ export const translations = {
     'bridge_in.address_book': '常用地址簿',
     'bridge_in.atos_unit': '原生 ATOS',
     'bridge_in.quick': '快捷',
-    'bridge_in.invalid_addr': '不是合法的 Atoshi 地址。',
+    'bridge_in.invalid_addr': '无效地址',
     'bridge_in.insufficient_balance': '数量超过你的 ERC20 余额。',
     'bridge_in.btn_insufficient': '余额不足',
     'bridge_in.btn_invalid_addr': '请检查接收地址',

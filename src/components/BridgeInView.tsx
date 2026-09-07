@@ -24,10 +24,8 @@ interface BridgeInViewProps {
   currentAtoshiAddress: string;
   recipientAtoshi: string;
   onRecipientAtoshiChange: (val: string) => void;
-  addressBook: AddressBookItem[];
   isSubmitting: boolean;
   onSubmit: (amountErc20: number, recipientAtoshi: string) => Promise<void>;
-  onOpenAddressBook: () => void;
   onOpenFAQ: () => void;
 }
 
@@ -37,11 +35,9 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
   currentAtoshiAddress,
   recipientAtoshi,
   onRecipientAtoshiChange,
-  addressBook,
   isSubmitting,
   isConnected,
   onSubmit,
-  onOpenAddressBook,
   onOpenFAQ,
 }) => {
   const { t } = useI18n();

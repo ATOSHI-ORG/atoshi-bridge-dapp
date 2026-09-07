@@ -31,13 +31,11 @@ interface BridgeOutViewProps {
   limits: BridgeLimits | null;
   userBalance: number;
   userAddress: string;
-  addressBook: AddressBookItem[];
   recipientEth: string;
   onRecipientEthChange: (val: string) => void;
   isSubmitting: boolean;
   onSubmit: (amount: number, recipientEth: string) => Promise<void>;
   onOpenRulesModal: () => void;
-  onOpenAddressBook: () => void;
 }
 
 export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
@@ -45,14 +43,12 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
   limits,
   userBalance,
   userAddress,
-  addressBook,
   recipientEth,
   onRecipientEthChange,
   isSubmitting,
   isConnected,
   onSubmit,
   onOpenRulesModal,
-  onOpenAddressBook,
 }) => {
   const { lang, t } = useI18n();
   const [amountStr, setAmountStr] = useState<string>('50000');
