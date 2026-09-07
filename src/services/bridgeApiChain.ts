@@ -369,16 +369,20 @@ async function submitBridgeIn(data: {
       steps: [
         {
           id: 1,
-          name: '以太坊已确认',
-          description: 'ERC20 已锁入金库',
+          nameKey: 'step.in.1.name',
+          descKey: 'step.in.1.desc',
+          name: '',
+          description: '',
           status: 'completed',
           timestamp: now,
           txHash: hash,
         },
         {
           id: 2,
-          name: '等待跨链消息投递',
-          description: 'Hyperlane relayer 转发中',
+          nameKey: 'step.in.2.name',
+          descKey: 'step.in.2.desc',
+          name: '',
+          description: '',
           status: 'processing',
           timestamp: now,
         },
@@ -386,7 +390,7 @@ async function submitBridgeIn(data: {
       sourceTxHash: hash,
       createdAt: now,
       updatedAt: now,
-      estimatedTimeRange: '1–5 分钟',
+      estimatedTimeRange: '',
     },
   };
 }

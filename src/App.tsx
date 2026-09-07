@@ -102,7 +102,7 @@ export default function App() {
       // 不再静默忽略。mock 模式下这里几乎不会触发；真链模式下节点连不上、
       // 跨域被拦、REST 没开，全都走到这儿 —— 吞掉的话页面只是不更新，
       // 看起来一切正常，是最难排查的一种故障。
-      setLoadError(e?.message || '读取链上数据失败');
+      setLoadError(e?.message || t('error.load_chain_data'));
     }
   }, [currentAddress, activeRecord]);
 
@@ -139,7 +139,7 @@ export default function App() {
       await fetchData();
       setActiveRecord(res.record);
     } catch (err: any) {
-      alert(`跨链失败: ${err.message}`);
+      alert(`${t('error.bridge_out_failed')}: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -157,7 +157,7 @@ export default function App() {
       await fetchData();
       setActiveRecord(res.record);
     } catch (err: any) {
-      alert(`以太坊跨链发起失败: ${err.message}`);
+      alert(`${t('error.bridge_in_failed')}: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -193,7 +193,7 @@ export default function App() {
         */}
         {IS_MOCK_MODE && (
           <div className="bg-amber-500 text-white text-[11px] font-bold text-center py-1.5 px-3 leading-snug">
-            演示模式（VITE_API_MODE=mock）：数据与交易哈希都是模拟的，链上不会发生任何事
+            {t('mock.banner')}
           </div>
         )}
 

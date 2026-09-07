@@ -82,9 +82,7 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
         <div className="mb-3 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
           <p className="text-[11px] leading-snug text-blue-800">
-            下面显示的是<strong>每日上限</strong>，不含今日已用量 ——
-            链上暂未提供已用量查询。实际可转金额可能低于此处显示，
-            以提交时链上的判定为准。
+            {t('quota.usage_unavailable')}
           </p>
         </div>
       )}

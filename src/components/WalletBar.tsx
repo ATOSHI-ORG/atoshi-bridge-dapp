@@ -12,6 +12,7 @@
  *  4. 一切正常 → 什么都不显示
  */
 
+import { useI18n } from '../i18n';
 import { AlertTriangle, Wallet } from 'lucide-react';
 
 import type { BridgeSide } from '../wallet/useWallet';
@@ -40,12 +41,13 @@ export function WalletBar({
   onConnect,
   onSwitch,
 }: WalletBarProps) {
+  const { t } = useI18n();
   if (loadError) {
     return (
       <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
         <div className="flex-1">
-          <p className="text-[12px] font-medium text-red-700">读取链上数据失败</p>
+          <p className="text-[12px] font-medium text-red-700">{t('wallet.load_failed')}</p>
           <p className="mt-0.5 break-words text-[11px] leading-snug text-red-600">{loadError}</p>
         </div>
       </div>
@@ -58,8 +60,8 @@ export function WalletBar({
         <p className="flex-1 text-[12px] leading-snug text-gray-500">
           {/* 普通浏览器里根本没有钱包可连，这时提示「请连接钱包」是误导 —— 点了不会有反应 */}
           {hasProvider
-            ? '查看额度无需连接。发起跨链需要签名，请先连接钱包。'
-            : '当前环境没有检测到钱包。请在 Atoshi 钱包内打开本页面。'}
+            ? t('wallet.connect_hint')
+            : t('wallet.no_provider')}
         </p>
         {hasProvider && (
           <button
@@ -68,7 +70,7 @@ export function WalletBar({
             className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#111827] px-3 py-1.5 text-[12px] font-medium text-white active:bg-black disabled:opacity-50"
           >
             <Wallet className="h-3.5 w-3.5" />
-            {isConnecting ? '连接中…' : '连接钱包'}
+            {isConnecting ? t('wallet.connecting') : t('wallet.connect')}
           </button>
         )}
       </div>
@@ -76,19 +78,23 @@ export function WalletBar({
   }
 
   if (!isOnRightChain) {
-    const need = side === 'atoshi' ? 'Atoshi' : '以太坊';
+
     return (
       <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
         <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
         <p className="flex-1 text-[12px] leading-snug text-amber-800">
-          {side === 'atoshi' ? '桥出' : '桥入'}的交易发在 {need} 链上，钱包当前不在这条链。
+          {side === 'atoshi' ? t('wallet.wrong_chain_out') : t('wallet.wrong_chain_in')}
         </p>
         <button
           onClick={onSwitch}
           disabled={isSwitching}
           className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1.5 text-[12px] font-medium text-white active:bg-amber-700 disabled:opacity-50"
         >
-          {isSwitching ? '切换中…' : `切到 ${need}`}
+          {isSwitching
+            ? t('wallet.switching')
+            : side === 'atoshi'
+              ? t('wallet.switch_to_atoshi')
+              : t('wallet.switch_to_eth')}
         </button>
       </div>
     );

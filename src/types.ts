@@ -49,6 +49,17 @@ export type TxStepStatus = 'pending' | 'processing' | 'completed' | 'failed' | '
 
 export interface TxStep {
   id: number;
+  /**
+   * 步骤文案。
+   *
+   * nameKey / descKey 是 i18n 键，有就优先用 —— 真链模式发的是键，所以切换
+   * 语言时进度条会跟着变。name / description 是已经成文的字符串，mock 模式
+   * 用它（mock 的文案带具体金额，不值得为演示数据做参数化）。
+   *
+   * 原来两边都只发成文的中文，于是这一段无论切成英文都是中文。
+   */
+  nameKey?: string;
+  descKey?: string;
   name: string;
   description: string;
   status: TxStepStatus;

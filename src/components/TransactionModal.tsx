@@ -125,7 +125,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <div>
                 <div className="text-[11px] text-gray-400">{t('tx_modal.est_time')}</div>
                 <div className="font-semibold text-gray-700 text-xs mt-0.5">
-                  {record.estimatedTimeRange || '1–5 mins'}
+                  {record.estimatedTimeRange || t('tx.est_range')}
                 </div>
               </div>
               <div>
@@ -209,7 +209,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                               : 'text-gray-400'
                           }`}
                         >
-                          {step.name}
+                          {step.nameKey ? t(step.nameKey) : step.name}
                         </span>
                         {step.timestamp && (
                           <span className="text-[10px] font-mono text-gray-400">
@@ -219,7 +219,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       </div>
 
                       <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
-                        {step.description}
+                        {step.descKey ? t(step.descKey) : step.description}
                       </p>
 
                       {/* 附加元数据 (Tx Hash / Hyperlane Message ID) */}

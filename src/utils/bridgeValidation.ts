@@ -38,68 +38,6 @@ export function isValidAtoshiAddress(address: string): boolean {
 }
 
 /**
- * 错误码多语言解释转换器
- */
-export function getErrorMessage(code: BridgeErrorCode | string, lang: 'en' | 'zh' = 'en'): string {
-  if (lang === 'zh') {
-    switch (code) {
-      case 'below_minimum':
-        return '单笔转账金额低于最低限额（1,000 ATOS），无法支付跨链信使开销。';
-      case 'crisis_mode':
-        return '当前流动性处于紧张状态，大额通道已临时锁定，仅受理 ≤100,000 ATOS 的小额转账。';
-      case 'daily_cap_reached':
-        return '全网今日跨链总额度已耗尽，请等待每日 00:00 重置后再试。';
-      case 'large_quota_reached':
-        return '今日大额共享配额已用尽。建议修改为 ≤100,000 ATOS 的小额转账，享受专属配额直接通过。';
-      case 'address_cap_reached':
-        return '已达到当前地址单日转账上限（全网每日额度的 2%），请明日重置后再试。';
-      case 'indivisible_amount':
-        return '转账金额必须是 100 的整数倍（因 100 ATOS : 1 ERC20 锚定规则，余数无法精确表示）。';
-      case 'bridge_disabled':
-        return '跨链桥系统正在例行维护中，跨链通道暂未开启。';
-      case 'pool_insufficient':
-        return 'Atoshi 链上资金池流动性不足，交易将进入安全排队等待流动性补充。';
-      case 'invalid_address':
-        return '输入的收款地址格式不正确，请仔细核对。';
-      case 'insufficient_balance':
-        return '钱包余额不足以支付当前转账金额。';
-      case 'unconfirmed_disclaimer':
-        return '请勾选确认收款地址所有权声明。';
-      default:
-        return '跨链请求处理失败，请稍后重试或联系客服协助。';
-    }
-  }
-
-  // English (Default)
-  switch (code) {
-    case 'below_minimum':
-      return 'Transfer amount is below the single transfer minimum (1,000 ATOS) required for cross-chain message fees.';
-    case 'crisis_mode':
-      return 'Liquidity crisis mode is active. Large transfers are locked; only ≤ 100,000 ATOS transfers are accepted.';
-    case 'daily_cap_reached':
-      return 'Global daily cross-chain quota has been exhausted. Please wait for 00:00 UTC daily reset.';
-    case 'large_quota_reached':
-      return 'Today’s large transfer quota is exhausted. Change to ≤ 100,000 ATOS to use the reserved small quota immediately.';
-    case 'address_cap_reached':
-      return 'Reached your personal daily cap (2% of global daily quota). Please try again after tomorrow’s reset.';
-    case 'indivisible_amount':
-      return 'Amount must be a multiple of 100 (100 ATOS : 1 ERC20 fixed peg; fractions cannot be represented).';
-    case 'bridge_disabled':
-      return 'Bridge system is under routine maintenance. Cross-chain channels are temporarily paused.';
-    case 'pool_insufficient':
-      return 'Atoshi on-chain pool liquidity is low. Transaction will enter a safe queue awaiting replenishment.';
-    case 'invalid_address':
-      return 'Invalid recipient address format. Please double-check.';
-    case 'insufficient_balance':
-      return 'Insufficient wallet balance for this transfer.';
-    case 'unconfirmed_disclaimer':
-      return 'Please accept the address ownership confirmation disclaimer.';
-    default:
-      return 'Cross-chain request failed. Please try again later or contact support.';
-  }
-}
-
-/**
  * 获取就近的 100 整数倍合法值（向上和向下）
  */
 export function getNearest100Multiples(amount: number): { lower: number; upper: number } {
