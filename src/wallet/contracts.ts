@@ -84,6 +84,72 @@ export const tokenRouterAbi = [
   },
 ] as const;
 
+
+/**
+ * bridgeadapter 预编译（Atoshi 侧，0x…0808）。桥出走这里。
+ *
+ * 这是预编译而不是部署的合约 —— 地址是链上 evm params 的
+ * active_static_precompiles 里写死的一项，没有字节码，`eth_getCode` 返回空。
+ * 所以别用「合约存在吗」去判断桥出可不可用，要查链上参数。
+ *
+ * 为什么必须是预编译：链上真正执行桥出的是 MsgBridgeOut，一条 Cosmos 消息，
+ * 而 MetaMask 这类钱包只签 EVM 交易。质押能用 EVM 钱包同理（0x…0800）。
+ */
+export const BRIDGE_ADAPTER_PRECOMPILE = '0x0000000000000000000000000000000000000808' as const;
+
+export const bridgeAdapterAbi = [
+  {
+    // recipient 是以太坊地址左填充到 32 字节，不是 20 字节的 address。
+    // maxFeeAmount 传 0 = 链上按实际跨链成本收，不设上限。
+    type: 'function',
+    name: 'bridgeOut',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'recipient', type: 'bytes32' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'maxFeeAmount', type: 'uint256' },
+    ],
+    outputs: [
+      { name: 'messageId', type: 'bytes32' },
+      { name: 'erc20Amount', type: 'uint256' },
+    ],
+  },
+  {
+    // EVM 交易拿不到函数返回值，messageId 只能从这个事件里解。
+    type: 'event',
+    name: 'BridgeOut',
+    inputs: [
+      { name: 'sender', type: 'address', indexed: true },
+      { name: 'recipient', type: 'bytes32', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'erc20Amount', type: 'uint256', indexed: false },
+      { name: 'messageId', type: 'bytes32', indexed: false },
+    ],
+  },
+] as const;
+
+/**
+ * Hyperlane Mailbox 的 Dispatch 事件。只用来从桥入的收据里解 messageId ——
+ * 没有它，用户拿到的只有一个以太坊 tx hash，查不到跨链消息到哪一步了。
+ */
+export const mailboxAbi = [
+  {
+    type: 'event',
+    name: 'Dispatch',
+    inputs: [
+      { name: 'sender', type: 'address', indexed: true },
+      { name: 'destination', type: 'uint32', indexed: true },
+      { name: 'recipient', type: 'bytes32', indexed: true },
+      { name: 'message', type: 'bytes', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'DispatchId',
+    inputs: [{ name: 'messageId', type: 'bytes32', indexed: true }],
+  },
+] as const;
+
 const addr = (v: string | undefined): `0x${string}` | undefined =>
   v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
 
@@ -102,4 +168,7 @@ export const ETH_CONTRACTS_READY = Boolean(ERC20_ATOS_ADDRESS && COLLATERAL_ADDR
 export const GAS_LIMITS = {
   approve: 100_000n,
   transferRemote: 500_000n,
+  // 桥出的预编译：实测 estimateGas 比实际消耗低约 2%（预编译的计费和 EVM
+  // 的 gas 模型不完全对齐），所以给固定上限而不是用估值，估少了会 out of gas。
+  bridgeOut: 600_000n,
 } as const;

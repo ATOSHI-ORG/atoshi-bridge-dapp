@@ -23,6 +23,8 @@
  * 见下面的 SCENARIOS_AVAILABLE。
  */
 
+import { tr } from '../i18n';
+
 import { bridgeServiceMock } from './bridgeApiMock';
 import { bridgeServiceChain } from './bridgeApiChain';
 import { REST_BASE } from './chainRest';
@@ -37,10 +39,7 @@ export const API_MODE: ApiMode = (() => {
 
   if (!REST_BASE) {
     throw new Error(
-      '没有配置 VITE_REST_URL。桥的链上参数需要节点的 Cosmos REST 端点' +
-        '（app.toml 的 [api]，默认 1317），不是 EVM JSON-RPC（8545）。\n\n' +
-        '要跑不连链的演示模式，显式设 VITE_API_MODE=mock —— 但那个模式会编造' +
-        '交易哈希，绝不能部署给用户。',
+      tr('err.rest_not_configured'),
     );
   }
   return 'chain';

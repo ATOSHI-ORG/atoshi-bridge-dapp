@@ -1,3 +1,5 @@
+import { tr } from '../i18n';
+
 /**
  * Atoshi 侧的 Cosmos REST 客户端。
  *
@@ -30,7 +32,7 @@ export class ChainRestError extends Error {
 export async function restGet<T>(path: string, timeoutMs = 12000): Promise<T> {
   if (!REST_BASE) {
     throw new ChainRestError(
-      '未配置 VITE_REST_URL。桥的链上参数需要节点的 Cosmos REST 端点（app.toml 的 [api]，默认 1317）。',
+      tr('err.rest_not_configured'),
       undefined,
       path,
     );
@@ -53,18 +55,18 @@ export async function restGet<T>(path: string, timeoutMs = 12000): Promise<T> {
       } catch {
         /* body 不是 JSON，用状态码就行 */
       }
-      throw new ChainRestError(detail || `请求失败 (HTTP ${res.status})`, res.status, path);
+      throw new ChainRestError(detail || tr('err.http_failed', { status: res.status }), res.status, path);
     }
 
     return (await res.json()) as T;
   } catch (e) {
     if (e instanceof ChainRestError) throw e;
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new ChainRestError(`请求超时 (${timeoutMs}ms)`, undefined, path);
+      throw new ChainRestError(tr('err.timeout', { ms: timeoutMs }), undefined, path);
     }
     // 跨域被拦、DNS 失败、节点没起来，在 fetch 里都是同一个 TypeError，分不出来
     throw new ChainRestError(
-      '连不上节点。检查 VITE_REST_URL 是否可达、节点 [api] 是否开启、是否允许跨域。',
+      tr('err.node_unreachable'),
       undefined,
       path,
     );
