@@ -240,7 +240,6 @@ export const translations = {
     // Validation Errors
     'err.insufficient_balance': 'Insufficient wallet balance (Available: {balance} ATOS)',
     'err.below_minimum': 'Below minimum single transfer amount ({min} ATOS)',
-    'err.indivisible_amount': 'Amount must be a multiple of 100. Suggested: {lower} or {upper}',
     'err.crisis_mode': 'Large transfers paused during liquidity crisis. Changing to ≤{threshold} ATOS passes instantly',
     'err.address_cap_reached': 'Exceeds your personal daily remaining quota (Remaining: {remaining} ATOS)',
     'err.large_quota_reached': 'Exceeds today’s large transfer quota. Change to ≤{threshold} ATOS to use reserved quota',
@@ -372,7 +371,7 @@ export const translations = {
     'err.bad_addr_len': 'The address decodes to {got} bytes, expected 20: {addr}',
     'err.bad_addr_pad': 'Address length is wrong, cannot pad to 32 bytes: {addr}',
     'err.wrong_chain_for_out': 'Bridging out needs the wallet on Atoshi (chain id {want}); it is on {got}. Switch chains first.',
-    'err.not_peg_multiple': 'The amount must be a whole multiple of {peg} ATOS. A remainder cannot be represented on the Ethereum side, so the chain rejects it rather than dropping it.',
+    'err.not_peg_multiple': 'The amount has more decimal places than the bridge can represent. Round it to a whole ATOS and try again.',
     'err.below_min_out': 'The amount is below the on-chain minimum of {min} ATOS per transfer.',
 },
 
@@ -605,7 +604,6 @@ export const translations = {
     // Validation Errors
     'err.insufficient_balance': '钱包余额不足（当前可用：{balance} ATOS）',
     'err.below_minimum': '低于单笔最低限额（{min} ATOS）',
-    'err.indivisible_amount': '金额需为 100 的整数倍，建议改为 {lower} 或 {upper}',
     'err.crisis_mode': '流动性紧张模式下大额已暂停，改为 ≤{threshold} ATOS 可立即通过',
     'err.address_cap_reached': '超出你今日个人剩余额度（剩余 {remaining} ATOS）',
     'err.large_quota_reached': '超出今日大额可用配额，改为 ≤{threshold} ATOS 可享小额专属配额立即通过',
@@ -737,7 +735,7 @@ export const translations = {
     'err.bad_addr_len': '地址解出来是 {got} 字节，期望 20 字节: {addr}',
     'err.bad_addr_pad': '地址长度不对，无法转成 32 字节: {addr}',
     'err.wrong_chain_for_out': '桥出需要钱包连在 Atoshi（chain id {want}），当前是 {got}。请先切链。',
-    'err.not_peg_multiple': '金额必须是 {peg} ATOS 的整数倍。余数在以太坊侧表示不出来，链上会拒绝而不是悄悄吞掉。',
+    'err.not_peg_multiple': '金额的小数位超出了桥能表示的精度。取整到整数 ATOS 再试。',
     'err.below_min_out': '金额低于链上的单笔下限 {min} ATOS。',
 },
 };

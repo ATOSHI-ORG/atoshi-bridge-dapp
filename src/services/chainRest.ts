@@ -95,7 +95,7 @@ export function amountOf(
  *
  * **真正不能用浮点的是另外两处**，都在下面和 bridgeValidation 里：
  *   1. atosToLiao —— 交易金额必须精确到 liao，浮点乘 1e18 会引入误差
- *   2. 整除判断 —— 桥要求金额是 100 ATOS 的整数倍（peg），
+ *   2. 整除判断 —— 链上按 liao 判（liao % atos_per_erc20），粒度 1e-16 ATOS，
  *      余数会在以太坊侧被静默吞掉，这个判断必须整数运算
  */
 export function liaoToAtos(liao: string | undefined): number {

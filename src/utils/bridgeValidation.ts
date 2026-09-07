@@ -38,16 +38,15 @@ export function isValidAtoshiAddress(address: string): boolean {
 }
 
 /**
- * 获取就近的 100 整数倍合法值（向上和向下）
+ * 建议金额取整到整数 ATOS。
+ *
+ * 以前这里取整到 100 的整数倍，因为当时以为链上要求金额是 100 ATOS 的整数倍。
+ * 不是 —— 见下面 validateAmount 里那条被删掉的规则。整数 ATOS 只是为了让
+ * 建议值好看，不是合法性要求。
  */
-export function getNearest100Multiples(amount: number): { lower: number; upper: number } {
-  if (isNaN(amount) || amount <= 0) return { lower: 1000, upper: 1100 };
-  const lower = Math.floor(amount / 100) * 100;
-  const upper = Math.ceil(amount / 100) * 100;
-  return {
-    lower: Math.max(1000, lower),
-    upper: upper === lower ? lower + 100 : upper,
-  };
+function floorToAtos(amount: number): number {
+  if (isNaN(amount) || amount <= 0) return 0;
+  return Math.floor(amount);
 }
 
 export interface AmountValidationResult {
@@ -55,7 +54,7 @@ export interface AmountValidationResult {
   errorCode?: BridgeErrorCode;
   errorMessage?: string;
   suggestedAmount?: number;
-  highlightTier?: 'single_min' | 'crisis' | 'global_cap' | 'large_quota' | 'address_cap' | 'indivisible' | 'balance';
+  highlightTier?: 'single_min' | 'crisis' | 'global_cap' | 'large_quota' | 'address_cap' | 'balance';
   isLargeTransfer: boolean;
 }
 
@@ -105,20 +104,17 @@ export function validateBridgeOutAmount(
     };
   }
 
-  // 3. 100 的整数倍硬性格式要求
-  if (amount % 100 !== 0) {
-    const { lower, upper } = getNearest100Multiples(amount);
-    return {
-      isValid: false,
-      errorCode: 'indivisible_amount',
-      errorMessage: lang === 'zh'
-        ? `金额需为 100 的整数倍，建议改为 ${lower.toLocaleString()} 或 ${upper.toLocaleString()}`
-        : `Must be multiple of 100. Suggested: ${lower.toLocaleString()} or ${upper.toLocaleString()}`,
-      suggestedAmount: lower <= limits.max_transferable ? lower : upper,
-      highlightTier: 'indivisible',
-      isLargeTransfer,
-    };
-  }
+  // 3. 曾经这里有一条「金额必须是 100 ATOS 的整数倍」。**链上没有这条要求。**
+  //
+  // 链上是 x/bridgeadapter/types/ratelimit.go 的 AtosToErc20，它检查的是
+  //   liao % atos_per_erc20 == 0        （liao，不是 ATOS）
+  // atos_per_erc20 是 100，而 1 ATOS = 1e18 liao，所以真实粒度是 100 liao
+  // = 1e-16 ATOS —— 前端这种十进制输入框根本碰不到。
+  //
+  // 之前那条规则把 1,050 ATOS 这种完全合法的金额也拒了（链上换出 10.5 ERC20，
+  // 没有任何问题）。删掉而不是改成 1e-16：写一条永远不会触发的规则只会让人
+  // 以后又去猜它是干什么的。真要有余数，链上会 revert，服务层也会先拦（见
+  // bridgeApiChain.ts 里按 liao 判的那一条）。
 
   // 4. 危机模式（池子 < 10%，只允许小额 ≤ 100,000 ATOS）
   if (limits.crisis_mode && isLargeTransfer) {
@@ -142,7 +138,7 @@ export function validateBridgeOutAmount(
       errorMessage: lang === 'zh'
         ? `超出你今日个人剩余额度（剩余 ${limits.address_remaining.toLocaleString()} ATOS）`
         : `Exceeds your personal daily quota (Remaining: ${limits.address_remaining.toLocaleString()} ATOS)`,
-      suggestedAmount: Math.floor(limits.address_remaining / 100) * 100,
+      suggestedAmount: floorToAtos(limits.address_remaining),
       highlightTier: 'address_cap',
       isLargeTransfer,
     };
@@ -170,7 +166,7 @@ export function validateBridgeOutAmount(
       errorMessage: lang === 'zh'
         ? `超出全网今日总剩余额度（剩余 ${limits.global_remaining.toLocaleString()} ATOS）`
         : `Exceeds global daily quota (Remaining: ${limits.global_remaining.toLocaleString()} ATOS)`,
-      suggestedAmount: Math.floor(limits.global_remaining / 100) * 100,
+      suggestedAmount: floorToAtos(limits.global_remaining),
       highlightTier: 'global_cap',
       isLargeTransfer,
     };

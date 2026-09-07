@@ -36,7 +36,6 @@ import type {
 import {
   BOND_DENOM,
   ChainRestError,
-  DECIMALS_18,
   amountOf,
   atosToLiao,
   liaoToAtos,
@@ -315,9 +314,14 @@ async function submitBridgeOut(data: {
 
   // getBridgeParams 返回的是 ATOS 单位，链上的参数是 liao —— 别混。
   const amount = BigInt(atosToLiao(data.amount_atos));
+
+  // 整除判断按 **liao** 算，不是按 ATOS。
+  //
+  // 链上是 AtosToErc20 的 `liao.Mod(atos_per_erc20)`，所以粒度是 100 liao
+  // = 1e-16 ATOS，不是 100 ATOS。按 ATOS 判会把 1,050 这种合法金额拒掉
+  // （链上换出 10.5 ERC20，没问题）—— 我最初就写错成这样。
   const peg = BigInt(params.atos_per_erc20);
-  const pegLiao = peg * DECIMALS_18;
-  if (pegLiao > 0n && amount % pegLiao !== 0n) {
+  if (peg > 0n && amount % peg !== 0n) {
     throw new ChainRestError(tr('err.not_peg_multiple', { peg: params.atos_per_erc20 }));
   }
   if (data.amount_atos < params.min_transfer_out) {
