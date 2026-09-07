@@ -22,7 +22,6 @@ interface BridgeInViewProps {
   isConnected: boolean;
   params: BridgeParams | null;
   userErc20Balance: number;
-  currentAtoshiAddress: string;
   recipientAtoshi: string;
   onRecipientAtoshiChange: (val: string) => void;
   isSubmitting: boolean;
@@ -33,7 +32,6 @@ interface BridgeInViewProps {
 export const BridgeInView: React.FC<BridgeInViewProps> = ({
   params,
   userErc20Balance,
-  currentAtoshiAddress,
   recipientAtoshi,
   onRecipientAtoshiChange,
   isSubmitting,
