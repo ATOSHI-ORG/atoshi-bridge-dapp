@@ -36,8 +36,6 @@ interface ImportMetaEnv {
   readonly VITE_COLLATERAL_ADDRESS?: string;
 
   /** 没连钱包时用哪个地址查只读数据 */
-  readonly VITE_DEMO_ATOSHI_ADDRESS?: string;
-  readonly VITE_DEMO_ETH_ADDRESS?: string;
 
   /** 质押币最小单位，默认 liao */
   readonly VITE_BOND_DENOM?: string;

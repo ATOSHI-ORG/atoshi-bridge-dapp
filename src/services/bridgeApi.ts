@@ -23,7 +23,7 @@
  * 见下面的 SCENARIOS_AVAILABLE。
  */
 
-import { bridgeServiceMock, DEMO_ATOSHI_ADDRESS, DEMO_ETH_ADDRESS } from './bridgeApiMock';
+import { bridgeServiceMock } from './bridgeApiMock';
 import { bridgeServiceChain } from './bridgeApiChain';
 import { REST_BASE } from './chainRest';
 
@@ -140,10 +140,11 @@ export const bridgeService = {
  * 没连钱包时的兜底地址，只用于首屏渲染和只读查询。
  * 连上钱包后由 useWallet 提供真实地址。
  */
-export const FALLBACK_ATOSHI_ADDRESS =
-  (import.meta.env.VITE_DEMO_ATOSHI_ADDRESS as string) || DEMO_ATOSHI_ADDRESS;
-export const FALLBACK_ETH_ADDRESS =
-  (import.meta.env.VITE_DEMO_ETH_ADDRESS as string) || DEMO_ETH_ADDRESS;
+// 兜底地址已经删掉了。
+//
+// 它原本用于「没连钱包时也让页面有东西可渲染」，代价是顶栏显示一个用户并不
+// 拥有的地址、还带着已连接的绿点，并且拿它去查余额和额度。现在没连钱包就是
+// 空，界面明确显示未连接。VITE_DEMO_* 两个环境变量随之作废。
 
 export { DEFAULT_PARAMS } from './bridgeApiMock';
 export { ChainRestError } from './chainRest';
