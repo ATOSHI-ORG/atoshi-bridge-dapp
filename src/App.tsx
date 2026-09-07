@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   BridgeParams,
   BridgeLimits,
@@ -26,6 +26,8 @@ import { HistoryDrawer } from './components/HistoryDrawer';
 import { FAQAndSupportModal } from './components/FAQAndSupportModal';
 import { ShieldX } from 'lucide-react';
 import { useI18n } from './i18n';
+import { loadRecords, mergeRecords, patchRecord, saveRecord } from './services/bridgeRecords';
+import { applyDelivery, confirmDelivery, isSettled } from './services/bridgeStatus';
 
 export default function App() {
   const { t } = useI18n();
@@ -63,6 +65,13 @@ export default function App() {
   const currentEthAddress = wallet.address || '';
   const isConnected = wallet.isConnected && Boolean(currentAddress);
 
+  // 同一个账户的两种表示，用来筛出「属于我的」本地记录。
+  // 桥入的 sender 是 0x（以太坊侧），桥出的 sender 是 atoshi1 —— 两个都要。
+  const addressForms = useMemo(
+    () => [currentAddress, currentEthAddress].filter(Boolean),
+    [currentAddress, currentEthAddress],
+  );
+
   // 加载数据
   const fetchData = useCallback(async () => {
     try {
@@ -83,13 +92,22 @@ export default function App() {
           // ERC20 余额是以太坊侧的合约调用，钱包没连到那条链时查不到
           bridgeService.getUserBalanceErc20().catch(() => 0),
         ]);
-        setRecords(fetchedHistory.list);
+        // 本地记录必须参与合并。
+        //
+        // getBridgeHistory 恒返回空数组（没有索引服务），而这里原来直接
+        // setRecords(空) —— 结果用户刚提交产生的记录在下一次自动刷新时就被
+        // 覆盖掉了，弹窗里的状态也永远停在「进行中」。
+        // 「跨链历史是空的」和「关掉弹窗就找不回来」是同一个 bug。
+        setRecords(mergeRecords(loadRecords(addressForms), fetchedHistory.list));
         setBalanceAtos(atos);
         setBalanceErc20(erc20);
 
-        // 正开着的交易弹窗要跟着刷新状态
+        // 正开着的交易弹窗要跟着刷新状态。
+        // 从合并后的列表里找，不是从服务端那个空列表里找 —— 后者永远找不到，
+        // 所以弹窗里的状态原来根本不会更新。
         if (activeRecord) {
-          const updated = fetchedHistory.list.find((r) => r.id === activeRecord.id);
+          const updated = mergeRecords(loadRecords(addressForms), fetchedHistory.list)
+            .find((r) => r.id === activeRecord.id);
           if (updated) setActiveRecord(updated);
         }
       } else {
@@ -104,7 +122,7 @@ export default function App() {
       // 看起来一切正常，是最难排查的一种故障。
       setLoadError(e?.message || t('error.load_chain_data'));
     }
-  }, [currentAddress, activeRecord]);
+  }, [currentAddress, activeRecord, addressForms]);
 
   // 收款地址跟着钱包走：连上就填自己的地址，断开就清空。
   //
@@ -127,6 +145,54 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  /**
+   * 到账确认轮询。
+   *
+   * 提交成功只说明源链收下了，钱到没到在目标链上。原来提交完记录就永远停在
+   * 「进行中」，用户只能自己去区块浏览器查 —— 而桥入的目标链是 Atoshi，
+   * 普通用户不知道去哪查。
+   *
+   * 两个方向都是真查链（见 bridgeStatus.ts）：桥入按 message_id 检索 Atoshi
+   * 上带 bridge_in 事件的放款交易，桥出问以太坊 Mailbox 的 delivered()。
+   * 不用「余额涨了」这种信号 —— 那会把别人转来的钱算成到账。
+   *
+   * 只查未终结的记录，查到了就写回 localStorage，所以刷新页面、关掉弹窗
+   * 再打开，看到的都是已经确认过的状态。
+   */
+  useEffect(() => {
+    if (!IS_CHAIN_MODE) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      const pending = loadRecords(addressForms).filter((r) => !isSettled(r));
+      if (pending.length === 0) return;
+
+      for (const record of pending) {
+        if (cancelled) return;
+        const res = await confirmDelivery(record);
+        // unknown 表示查不动（节点不通、缺 messageId），保持原状再等下一轮 ——
+        // 不能当成「没到账」写进记录里。
+        if (!res.delivered) continue;
+
+        const updated = applyDelivery(record, res);
+        patchRecord(updated.id, updated);
+        if (cancelled) return;
+        setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        setActiveRecord((prev) => (prev && prev.id === updated.id ? updated : prev));
+      }
+    };
+
+    tick();
+    // 15 秒一轮。跨链正常在 1-2 分钟，再快只是多打链、看不出差别；
+    // 而失败重试的间隔本身就是分钟级的（relayer 那边指数退避）。
+    const timer = setInterval(tick, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [addressForms]);
+
   // 桥出提交处理
   const handleSubmitBridgeOut = async (amount: number, recipientEth: string) => {
     setIsSubmitting(true);
@@ -136,8 +202,12 @@ export default function App() {
         recipient_eth_address: recipientEth,
         amount_atos: amount,
       });
-      await fetchData();
+      // 先落本地再刷新。原来是先 fetchData() 再 setActiveRecord —— 那次
+      // fetchData 会把刚产生的记录冲掉，只剩 activeRecord 一个孤立引用，
+      // 关掉弹窗就再也找不回来。
+      saveRecord(res.record);
       setActiveRecord(res.record);
+      await fetchData();
     } catch (err: any) {
       alert(`${t('error.bridge_out_failed')}: ${err.message}`);
     } finally {
@@ -154,8 +224,12 @@ export default function App() {
         recipient_atoshi_address: recipientAtoshi,
         amount_erc20: amountErc20,
       });
-      await fetchData();
+      // 先落本地再刷新。原来是先 fetchData() 再 setActiveRecord —— 那次
+      // fetchData 会把刚产生的记录冲掉，只剩 activeRecord 一个孤立引用，
+      // 关掉弹窗就再也找不回来。
+      saveRecord(res.record);
       setActiveRecord(res.record);
+      await fetchData();
     } catch (err: any) {
       alert(`${t('error.bridge_in_failed')}: ${err.message}`);
     } finally {

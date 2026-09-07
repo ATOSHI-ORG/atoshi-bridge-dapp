@@ -175,12 +175,12 @@ export const translations = {
 
     // History Drawer
     'history.title': 'Bridge History',
-    'history.subtitle': 'Track state machine progress & on-chain proofs',
+    'history.subtitle': 'Kept in this browser only',
     'history.tab_all': 'All ({count})',
     'history.tab_out': 'Bridge Out (Atoshi → ETH)',
     'history.tab_in': 'Bridge In (ETH → Atoshi)',
     'history.empty_title': 'No Bridge Records Yet',
-    'history.empty_desc': 'Your cross-chain transactions will appear here in chronological order with full verification details.',
+    'history.empty_desc': 'Transfers you make here are recorded in this browser, and their arrival is confirmed against both chains. Records are not synced across devices, and transfers made elsewhere will not show up.',
     'history.out_title': 'Bridge Out to Ethereum',
     'history.in_title': 'Bridge In to Atoshi',
     'history.btn_back': 'Back',
@@ -535,12 +535,12 @@ export const translations = {
 
     // History Drawer
     'history.title': '跨链历史记录',
-    'history.subtitle': '查看跨链推进与链上凭证',
+    'history.subtitle': '仅保存在本浏览器',
     'history.tab_all': '全部 ({count})',
     'history.tab_out': '桥出 (Atoshi ➔ ETH)',
     'history.tab_in': '桥入 (ETH ➔ Atoshi)',
     'history.empty_title': '暂无跨链记录',
-    'history.empty_desc': '您发起的跨链转账将在这里按时间顺序展示，包含全流程状态机与 Hyperlane 消息凭证。',
+    'history.empty_desc': '在这个页面发起的跨链会记在本浏览器里，到账状态会去两条链上核对。记录不跨设备同步，在别处发起的跨链这里看不到。',
     'history.out_title': '桥出至以太坊',
     'history.in_title': '桥入至 Atoshi',
     'history.btn_back': '返回',
