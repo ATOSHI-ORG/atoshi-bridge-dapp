@@ -64,9 +64,9 @@ export const translations = {
     'bridge_in.liquidity_title': 'Liquidity Queue Protection',
     'bridge_in.liquidity_desc': 'If the Atoshi pool is temporarily replenishing, the cross-chain message is safely retained in "Waiting for Liquidity" queue. Assets are 100% safe and will never be lost.',
     'bridge_in.faq_link': 'Q&A',
-    'bridge_in.recipient_label': 'Recipient Address (Atoshi Mainnet)',
+    'bridge_in.recipient_label': 'Recipient Address (Atoshi) — 0x or atoshi1',
     'bridge_in.fill_my_addr': 'Use My Address',
-    'bridge_in.recipient_placeholder': 'Bech32 address starting with atoshi1',
+    'bridge_in.recipient_placeholder': '0x… or atoshi1… (both work)',
     'bridge_in.invalid_atoshi_addr': 'Please enter a valid Atoshi address starting with atoshi1',
     'bridge_in.disclaimer': 'I confirm this is an Atoshi native address controlled by me. Ethereum cross-chain transactions are irreversible.',
     'bridge_in.btn_submitting': 'Awaiting Ethereum wallet signature...',
@@ -368,6 +368,7 @@ export const translations = {
     'err.wrong_chain_for_out': 'Bridging out needs the wallet on Atoshi (chain id {want}); it is on {got}. Switch chains first.',
     'err.not_peg_multiple': 'The amount has more decimal places than the bridge can represent. Round it to a whole ATOS and try again.',
     'err.below_min_out': 'The amount is below the on-chain minimum of {min} ATOS per transfer.',
+    'bridge_in.same_account': 'Same account:',
 },
 
   zh: {
@@ -423,9 +424,9 @@ export const translations = {
     'bridge_in.liquidity_title': '流动性安全排队机制',
     'bridge_in.liquidity_desc': '若 Atoshi 资金池临时补充期，跨链消息将自动保留并进入「等待流动性补充中」排队放款状态，资产绝对安全，绝不会丢币。',
     'bridge_in.faq_link': '疑问解答',
-    'bridge_in.recipient_label': '接收地址 (Atoshi 主网)',
+    'bridge_in.recipient_label': '接收地址 (Atoshi) — 0x 或 atoshi1 均可',
     'bridge_in.fill_my_addr': '填入我的地址',
-    'bridge_in.recipient_placeholder': '以 atoshi1 开头的 Bech32 地址',
+    'bridge_in.recipient_placeholder': '0x… 或 atoshi1… 都可以',
     'bridge_in.invalid_atoshi_addr': '请输入以 atoshi1 开头的合法 Atoshi 主网地址',
     'bridge_in.disclaimer': '我确认这是由我控制的 Atoshi 原生地址。以太坊跨链交易提交后不可撤回。',
     'bridge_in.btn_submitting': '唤起以太坊钱包签名中...',
@@ -727,6 +728,7 @@ export const translations = {
     'err.wrong_chain_for_out': '桥出需要钱包连在 Atoshi（chain id {want}），当前是 {got}。请先切链。',
     'err.not_peg_multiple': '金额的小数位超出了桥能表示的精度。取整到整数 ATOS 再试。',
     'err.below_min_out': '金额低于链上的单笔下限 {min} ATOS。',
+    'bridge_in.same_account': '同一个账户：',
 },
 };
 

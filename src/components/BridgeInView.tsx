@@ -10,6 +10,7 @@ import {
   formatNumber,
 } from '../utils/bridgeValidation';
 import { useI18n } from '../i18n';
+import { bech32ToHex, hexToBech32 } from '../wallet/chains';
 
 interface BridgeInViewProps {
   /**
@@ -52,8 +53,20 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
     return amountErc20Num * 100;
   }, [amountErc20Num]);
 
-  // Atoshi bech32 地址校验
+  // 0x 和 atoshi1 两种都收 —— 同一个账户的两种表示
   const isAtoshiAddressValid = isValidAtoshiAddress(recipientAtoshi);
+
+  // 换算成另一种形式给用户核对。换算失败就不显示，不弹错 ——
+  // 合法性由上面那个判断负责，这里只是个辅助显示。
+  const otherForm = useMemo(() => {
+    const a = recipientAtoshi.trim();
+    if (!a || !isAtoshiAddressValid) return '';
+    try {
+      return a.startsWith('0x') ? hexToBech32(a) : bech32ToHex(a);
+    } catch {
+      return '';
+    }
+  }, [recipientAtoshi, isAtoshiAddressValid]);
 
   // 余额校验
   const isBalanceEnough = amountErc20Num > 0 && amountErc20Num <= userErc20Balance;
@@ -202,6 +215,18 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
           {recipientAtoshi && !isAtoshiAddressValid && (
             <p className="text-[11px] text-rose-600 mt-1 font-medium">
               {t('bridge_in.invalid_addr')}
+            </p>
+          )}
+
+          {/*
+            填了 0x 就把 atoshi1 形式显示出来（反之亦然）。
+            两种形式是同一个账户，但用户没理由相信这句话 —— 把换算结果摆出来
+            让他自己核对，比在旁边写一行「这两个是同一个地址」有用。
+          */}
+          {recipientAtoshi && isAtoshiAddressValid && otherForm && (
+            <p className="text-[11px] text-gray-500 mt-1 font-mono break-all">
+              <span className="font-sans">{t('bridge_in.same_account')}</span>{' '}
+              {otherForm}
             </p>
           )}
         </div>
