@@ -134,8 +134,11 @@ export default function App() {
   }, [currentEthAddress]);
 
   useEffect(() => {
-    setRecipientAtoshi(currentAddress || '');
-  }, [currentAddress]);
+    // 预填 0x 形式，不是 bech32。两种都能收（同一个账户），但用户手上有的、
+    // 认得出的是 0x —— 预填 atoshi1… 他没法判断那是不是自己的地址。
+    // 输入框下面会把换算出的 atoshi1… 显示出来给他核对。
+    setRecipientAtoshi(currentEthAddress || '');
+  }, [currentEthAddress]);
 
   useEffect(() => {
     fetchData();
@@ -272,8 +275,14 @@ export default function App() {
         )}
 
         {/* 顶部导航与方向切换 */}
+        {/*
+          顶栏显示 0x 形式。用户从 MetaMask 过来，认的是这个 —— 顶栏挂一个
+          atoshi1… 会让人以为连错了钱包。bech32 只在真正需要它的地方出现：
+          Cosmos REST 的查询路径（余额、额度、历史都按 bech32 查）和桥入
+          收款地址下面那行换算提示。
+        */}
         <Header
-          currentAddress={currentAddress}
+          currentAddress={currentEthAddress}
           isConnected={isConnected}
           balanceAtos={balanceAtos}
           activeDirection={activeDirection}
@@ -343,7 +352,6 @@ export default function App() {
             <BridgeInView
               params={params}
               userErc20Balance={balanceErc20}
-              currentAtoshiAddress={currentAddress}
               recipientAtoshi={recipientAtoshi}
               onRecipientAtoshiChange={setRecipientAtoshi}
               isSubmitting={isSubmitting}
