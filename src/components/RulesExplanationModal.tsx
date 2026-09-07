@@ -143,22 +143,6 @@ export const RulesExplanationModal: React.FC<RulesExplanationModalProps> = ({
                 {t('rules_modal.tier5_desc')}
               </p>
             </div>
-
-            {/* 硬性格式要求 */}
-            <div className="bg-amber-50/60 border border-amber-200/60 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-semibold text-amber-900 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-900 text-[11px] font-bold inline-flex items-center justify-center">6</span>
-                  {t('rules_modal.rule_mult_title')}
-                </span>
-                <span className="font-mono font-bold text-amber-900 bg-white px-2 py-0.5 rounded border border-amber-200 text-[11px]">
-                  Amount % 100 == 0
-                </span>
-              </div>
-              <p className="text-[11px] text-amber-800 leading-relaxed mt-1">
-                {t('rules_modal.rule_mult_desc')}
-              </p>
-            </div>
           </div>
         </div>
 

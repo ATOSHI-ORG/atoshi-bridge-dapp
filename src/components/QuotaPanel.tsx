@@ -248,10 +248,6 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
             <div className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-1.5"></div>
             {t('quota.min_limit_tag')} <span className="font-mono font-bold text-black ml-1">1,000</span>
           </div>
-          <div className="flex items-center">
-            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-1.5"></div>
-            {t('quota.multiple_tag')}
-          </div>
         </div>
 
         <button
