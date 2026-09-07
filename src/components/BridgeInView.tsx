@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   ArrowRight,
   ShieldCheck,
-  BookUser,
   HelpCircle,
 } from 'lucide-react';
 import { BridgeParams, AddressBookItem } from '../types';
@@ -13,6 +12,13 @@ import {
 import { useI18n } from '../i18n';
 
 interface BridgeInViewProps {
+  /**
+   * 钱包连上了吗。
+   *
+   * 提交按钮原来不看这一项，所以没连钱包也能点 —— 而 mock 模式下点了还会
+   * 「成功」。发起跨链必须签名，没有钱包连什么都做不了。
+   */
+  isConnected: boolean;
   params: BridgeParams | null;
   userErc20Balance: number;
   currentAtoshiAddress: string;
@@ -33,6 +39,7 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
   onRecipientAtoshiChange,
   addressBook,
   isSubmitting,
+  isConnected,
   onSubmit,
   onOpenAddressBook,
   onOpenFAQ,
@@ -59,12 +66,10 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
     setAmountErc20Str(String(userErc20Balance));
   };
 
-  const handleUseMyAtoshiAddress = () => {
-    onRecipientAtoshiChange(currentAtoshiAddress);
-  };
 
   const canSubmit =
     !isSubmitting &&
+    isConnected &&
     params?.bridge_enabled &&
     amountErc20Num > 0 &&
     isBalanceEnough &&
@@ -182,25 +187,6 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
           <label htmlFor="input-recipient-atoshi" className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             {t('bridge_in.recipient_label')}
           </label>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              id="btn-fill-my-atoshi-address"
-              onClick={handleUseMyAtoshiAddress}
-              className="text-[10px] font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded transition-colors"
-            >
-              {t('bridge_in.fill_my_addr')}
-            </button>
-            <button
-              type="button"
-              id="btn-open-atoshi-address-book"
-              onClick={onOpenAddressBook}
-              className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors inline-flex items-center gap-1"
-            >
-              <BookUser className="w-3 h-3" />
-              <span>{t('bridge_in.address_book')}</span>
-            </button>
-          </div>
         </div>
 
         <div>
@@ -216,27 +202,6 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
                 : 'border-gray-200'
             }`}
           />
-
-          {/* 常用地址快捷填入 */}
-          {addressBook.filter(a => a.network === 'atoshi').length > 0 && (
-            <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 text-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 shrink-0">{t('bridge_in.quick')}</span>
-              {addressBook.filter(a => a.network === 'atoshi').slice(0, 3).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onRecipientAtoshiChange(item.address)}
-                  className={`px-2 py-0.5 rounded text-[10px] border transition-all shrink-0 font-medium ${
-                    recipientAtoshi === item.address
-                      ? 'bg-black text-white border-black font-bold'
-                      : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
 
           {recipientAtoshi && !isAtoshiAddressValid && (
             <p className="text-[11px] text-rose-600 mt-1 font-medium">
@@ -280,6 +245,8 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
               <span>{t('bridge_in.btn_submitting')}</span>
             </>
+          ) : !isConnected ? (
+            <span>{t('common.connect_wallet_first')}</span>
           ) : !params?.bridge_enabled ? (
             <span>{t('bridge_in.btn_maint')}</span>
           ) : !amountErc20Num || amountErc20Num <= 0 ? (

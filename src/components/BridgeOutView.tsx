@@ -15,12 +15,18 @@ import { QuotaPanel } from './QuotaPanel';
 import {
   validateBridgeOutAmount,
   isValidEthereumAddress,
-  formatEthAddressTo32Bytes,
   formatNumber,
 } from '../utils/bridgeValidation';
 import { useI18n } from '../i18n';
 
 interface BridgeOutViewProps {
+  /**
+   * 钱包连上了吗。
+   *
+   * 提交按钮原来不看这一项，所以没连钱包也能点 —— 而 mock 模式下点了还会
+   * 「成功」。发起跨链必须签名，没有钱包连什么都做不了。
+   */
+  isConnected: boolean;
   params: BridgeParams | null;
   limits: BridgeLimits | null;
   userBalance: number;
@@ -43,6 +49,7 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
   recipientEth,
   onRecipientEthChange,
   isSubmitting,
+  isConnected,
   onSubmit,
   onOpenRulesModal,
   onOpenAddressBook,
@@ -50,8 +57,6 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
   const { lang, t } = useI18n();
   const [amountStr, setAmountStr] = useState<string>('50000');
   const [isDisclaimerChecked, setIsDisclaimerChecked] = useState<boolean>(true);
-  const [show32BytePreview, setShow32BytePreview] = useState<boolean>(false);
-  const [copied32Byte, setCopied32Byte] = useState<boolean>(false);
 
   const amountNum = parseFloat(amountStr) || 0;
 
@@ -69,7 +74,6 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
 
   // 地址合法性校验
   const isEthAddressValid = isValidEthereumAddress(recipientEth);
-  const formatted32b = useMemo(() => formatEthAddressTo32Bytes(recipientEth), [recipientEth]);
 
   // 点击“最大”按钮：填入根据五层计算出的 max_transferable
   const handleSetMax = () => {
@@ -83,15 +87,10 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
     setAmountStr(String(val));
   };
 
-  const handleCopy32Bytes = () => {
-    if (!formatted32b) return;
-    navigator.clipboard.writeText(formatted32b);
-    setCopied32Byte(true);
-    setTimeout(() => setCopied32Byte(false), 2000);
-  };
 
   const canSubmit =
     !isSubmitting &&
+    isConnected &&
     params?.bridge_enabled &&
     validationResult.isValid &&
     isEthAddressValid &&
@@ -235,15 +234,6 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
           <label htmlFor="input-recipient-eth" className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             {t('bridge_out.recipient_label')}
           </label>
-          <button
-            type="button"
-            id="btn-open-eth-address-book"
-            onClick={onOpenAddressBook}
-            className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors inline-flex items-center gap-1"
-          >
-            <BookUser className="w-3 h-3" />
-            <span>{t('bridge_out.address_book')}</span>
-          </button>
         </div>
 
         <div>
@@ -260,65 +250,12 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
             }`}
           />
 
-          {/* 常用地址快捷填入 Chips */}
-          {addressBook.filter(a => a.network === 'ethereum').length > 0 && (
-            <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 text-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 shrink-0">{t('bridge_out.quick')}</span>
-              {addressBook.filter(a => a.network === 'ethereum').slice(0, 3).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onRecipientEthChange(item.address)}
-                  className={`px-2 py-0.5 rounded text-[10px] border transition-all shrink-0 font-medium ${
-                    recipientEth === item.address
-                      ? 'bg-black text-white border-black font-bold'
-                      : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           {recipientEth && !isEthAddressValid && (
             <p className="text-[11px] text-rose-600 mt-1 font-medium">
               {t('bridge_out.invalid_eth_addr')}
             </p>
           )}
         </div>
-
-        {/* 链上 32 字节 Hex 格式折叠预览 */}
-        {isEthAddressValid && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setShow32BytePreview(!show32BytePreview)}
-              className="w-full flex items-center justify-between text-gray-600 hover:text-black font-medium"
-            >
-              <span className="flex items-center gap-1.5 text-[11px]">
-                <ShieldCheck className="w-3.5 h-3.5 text-green-600" />
-                <span>{t('bridge_out.encoding_title')}</span>
-              </span>
-              {show32BytePreview ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-
-            {show32BytePreview && (
-              <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between text-[10px] font-mono text-gray-700">
-                <span className="truncate max-w-[280px]" title={formatted32b}>
-                  {formatted32b}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopy32Bytes}
-                  className="text-gray-400 hover:text-black p-1 shrink-0 ml-1"
-                >
-                  {copied32Byte ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* 必选勾选框：确认以太坊地址所有权 */}
         <div className="p-3.5 bg-blue-50/60 rounded-lg border border-blue-100">
@@ -355,6 +292,8 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
               <span>{t('bridge_out.btn_submitting')}</span>
             </>
+          ) : !isConnected ? (
+            <span>{t('common.connect_wallet_first')}</span>
           ) : !params?.bridge_enabled ? (
             <span>{t('bridge_out.btn_maint')}</span>
           ) : !validationResult.isValid ? (

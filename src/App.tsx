@@ -13,8 +13,8 @@ import {
 } from './types';
 import {
   bridgeService,
-  FALLBACK_ATOSHI_ADDRESS,
   IS_CHAIN_MODE,
+  IS_MOCK_MODE,
 } from './services/bridgeApi';
 import { useWallet } from './wallet/useWallet';
 import { WalletBar } from './components/WalletBar';
@@ -37,10 +37,16 @@ export default function App() {
   const [activeDirection, setActiveDirection] = useState<BridgeDirection>('out');
   const [addressBook, setAddressBook] = useState<AddressBookItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [balanceAtos, setBalanceAtos] = useState<number>(3_850_000);
-  const [balanceErc20, setBalanceErc20] = useState<number>(25_000);
-  const [recipientEth, setRecipientEth] = useState<string>('0x71C8F3b146437930f78FEA093eD414A0A45331Eb');
-  const [recipientAtoshi, setRecipientAtoshi] = useState<string>(FALLBACK_ATOSHI_ADDRESS);
+  // 初始值必须是「空」而不是演示数据。
+  //
+  // 这几个字段原来分别写死了 3,850,000 / 25,000 和一个 0x71C8… 的地址。没连
+  // 钱包时页面照样显示这些数字和一个预填的收款地址，看起来像是查到了真实
+  // 余额 —— 测试同学报的「未连钱包却有余额」「接收地址自动填了个不认识的
+  // 地址」就是这个。
+  const [balanceAtos, setBalanceAtos] = useState<number>(0);
+  const [balanceErc20, setBalanceErc20] = useState<number>(0);
+  const [recipientEth, setRecipientEth] = useState<string>('');
+  const [recipientAtoshi, setRecipientAtoshi] = useState<string>('');
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modal 控制
@@ -53,37 +59,51 @@ export default function App() {
   const [selectedTxIdForSupport, setSelectedTxIdForSupport] = useState<string | undefined>(undefined);
 
   // 钱包给的是 0x 地址，Cosmos REST 的查询路径只认 atoshi1…，useWallet 里已转好。
-  // 没连钱包时退回兜底地址，让页面有东西可渲染。
+  //
+  // 没连钱包时这里是空串，不再退回兜底地址。原来退回 FALLBACK_ATOSHI_ADDRESS
+  // 是「让页面有东西可渲染」，但代价是顶栏显示一个用户并不拥有的地址、还带着
+  // 绿色的已连接圆点，并且拿那个地址去查余额和额度。
   const wallet = useWallet();
-  const currentAddress = wallet.bech32Address || FALLBACK_ATOSHI_ADDRESS;
+  const currentAddress = wallet.bech32Address;
   const currentEthAddress = wallet.address || '';
+  const isConnected = wallet.isConnected && Boolean(currentAddress);
 
   // 加载数据
   const fetchData = useCallback(async () => {
     try {
-      const [fetchedParams, fetchedLimits, fetchedHistory, atos, erc20] = await Promise.all([
+      // 参数和限流上限是全局的，不连钱包也能看（页面上那句「查看额度无需连接」）。
+      // 余额、已用额度、历史都是按地址的 —— 没地址就不要发这些请求：拿空串去
+      // 查会得到一个看起来正常但毫无意义的结果。
+      const [fetchedParams, fetchedLimits] = await Promise.all([
         bridgeService.getBridgeParams(),
-        bridgeService.getBridgeLimits(currentAddress),
-        bridgeService.getBridgeHistory(currentAddress),
-        bridgeService.getUserBalanceAtos(currentAddress),
-        // ERC20 余额要连钱包才查得到，没连时不报错、显示 0
-        bridgeService.getUserBalanceErc20().catch(() => 0),
+        bridgeService.getBridgeLimits(currentAddress || undefined),
       ]);
       setParams(fetchedParams);
       setLimits(fetchedLimits);
-      setRecords(fetchedHistory.list);
       setAddressBook(bridgeService.getAddressBook());
-      setBalanceAtos(atos);
-      setBalanceErc20(erc20);
-      setLoadError(null);
 
-      // 如果当前正打开某个交易弹窗，更新其状态
-      if (activeRecord) {
-        const updated = fetchedHistory.list.find((r) => r.id === activeRecord.id);
-        if (updated) {
-          setActiveRecord(updated);
+      if (currentAddress) {
+        const [fetchedHistory, atos, erc20] = await Promise.all([
+          bridgeService.getBridgeHistory(currentAddress),
+          bridgeService.getUserBalanceAtos(currentAddress),
+          // ERC20 余额是以太坊侧的合约调用，钱包没连到那条链时查不到
+          bridgeService.getUserBalanceErc20().catch(() => 0),
+        ]);
+        setRecords(fetchedHistory.list);
+        setBalanceAtos(atos);
+        setBalanceErc20(erc20);
+
+        // 正开着的交易弹窗要跟着刷新状态
+        if (activeRecord) {
+          const updated = fetchedHistory.list.find((r) => r.id === activeRecord.id);
+          if (updated) setActiveRecord(updated);
         }
+      } else {
+        setRecords([]);
+        setBalanceAtos(0);
+        setBalanceErc20(0);
       }
+      setLoadError(null);
     } catch (e: any) {
       // 不再静默忽略。mock 模式下这里几乎不会触发；真链模式下节点连不上、
       // 跨域被拦、REST 没开，全都走到这儿 —— 吞掉的话页面只是不更新，
@@ -91,6 +111,19 @@ export default function App() {
       setLoadError(e?.message || '读取链上数据失败');
     }
   }, [currentAddress, activeRecord]);
+
+  // 收款地址跟着钱包走：连上就填自己的地址，断开就清空。
+  //
+  // 桥出收的是以太坊地址，桥入收的是 Atoshi 地址，而钱包的同一把密钥两边都有
+  // 表示形式，所以两个方向都能自动填。用户改过之后不再覆盖（只在地址本身变化
+  // 时同步），否则输入一半会被刷掉。
+  useEffect(() => {
+    setRecipientEth(currentEthAddress || '');
+  }, [currentEthAddress]);
+
+  useEffect(() => {
+    setRecipientAtoshi(currentAddress || '');
+  }, [currentAddress]);
 
   useEffect(() => {
     fetchData();
@@ -168,9 +201,21 @@ export default function App() {
         分栏由 BridgeOutView 自己的 lg:grid 负责，这里只放开宽度。
       */}
       <div className="w-full max-w-[420px] bg-white min-h-screen sm:min-h-0 sm:rounded-2xl shadow-2xl border border-gray-200 flex flex-col relative overflow-hidden lg:max-w-[1040px]">
+        {/*
+          mock 模式必须一眼看出来。
+          这个模式会编造交易哈希并把流程走完打上「已完成」，和真链在界面上
+          没有任何区别 —— 一次忘配环境变量就足以让人以为跨链成功了。
+        */}
+        {IS_MOCK_MODE && (
+          <div className="bg-amber-500 text-white text-[11px] font-bold text-center py-1.5 px-3 leading-snug">
+            演示模式（VITE_API_MODE=mock）：数据与交易哈希都是模拟的，链上不会发生任何事
+          </div>
+        )}
+
         {/* 顶部导航与方向切换 */}
         <Header
           currentAddress={currentAddress}
+          isConnected={isConnected}
           balanceAtos={balanceAtos}
           activeDirection={activeDirection}
           onDirectionChange={setActiveDirection}
@@ -231,6 +276,7 @@ export default function App() {
               recipientEth={recipientEth}
               onRecipientEthChange={setRecipientEth}
               isSubmitting={isSubmitting}
+              isConnected={isConnected}
               onSubmit={handleSubmitBridgeOut}
               onOpenRulesModal={() => setIsRulesModalOpen(true)}
               onOpenAddressBook={() => handleOpenAddressBook('ethereum')}
@@ -245,6 +291,7 @@ export default function App() {
               onRecipientAtoshiChange={setRecipientAtoshi}
               addressBook={addressBook}
               isSubmitting={isSubmitting}
+              isConnected={isConnected}
               onSubmit={handleSubmitBridgeIn}
               onOpenAddressBook={() => handleOpenAddressBook('atoshi')}
               onOpenFAQ={() => {

@@ -5,6 +5,8 @@ import { useI18n } from '../i18n';
 
 interface HeaderProps {
   currentAddress: string;
+  /** 没连钱包时顶栏不能显示地址，也不能显示「已连接」的绿点。 */
+  isConnected: boolean;
   balanceAtos: number;
   activeDirection: 'out' | 'in';
   onDirectionChange: (direction: 'out' | 'in') => void;
@@ -16,6 +18,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   currentAddress,
+  isConnected,
   activeDirection,
   onDirectionChange,
   onOpenHistory,
@@ -29,10 +32,23 @@ export const Header: React.FC<HeaderProps> = ({
       {/* 顶部实用工具栏：钱包状态、语言切换、客服与历史 */}
       <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100/80 bg-gray-50/50">
         {/* 钱包连接状态 */}
+        {/*
+          未连接时显示「未连接」和一个灰点。
+          原来这里无条件渲染地址 + 脉动的绿点，没连钱包也一样 —— 页面看起来
+          像已经连上了某个账户，而那个地址其实是代码里的兜底值。
+        */}
         <div className="flex items-center space-x-1.5 bg-white px-2.5 py-1 rounded-full border border-gray-200 shadow-2xs">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shrink-0"></div>
-          <span className="text-[11px] font-medium text-gray-700 font-mono select-none">
-            {shortenAddress(currentAddress, 6, 4)}
+          <div
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'
+            }`}
+          ></div>
+          <span
+            className={`text-[11px] font-medium font-mono select-none ${
+              isConnected ? 'text-gray-700' : 'text-gray-400'
+            }`}
+          >
+            {isConnected ? shortenAddress(currentAddress, 6, 4) : t('header.not_connected')}
           </span>
         </div>
 
@@ -114,9 +130,6 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200/60 font-mono">
-          <span>Hyperlane ISM</span>
-        </div>
       </div>
 
       {/* 两个方向切换 Tabs */}

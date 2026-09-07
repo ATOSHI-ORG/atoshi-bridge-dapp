@@ -1,8 +1,18 @@
 /**
  * bridgeService 的切换层。UI 只 import 这个文件。
  *
- *   VITE_API_MODE=mock   （默认）内置模拟数据 + 状态机模拟，不需要节点和钱包。
- *   VITE_API_MODE=chain  连真链。
+ *   VITE_API_MODE=chain  （默认）连真链。
+ *   VITE_API_MODE=mock   内置模拟数据 + 状态机模拟，不需要节点和钱包。
+ *
+ * ⚠️ 默认必须是 chain，而且 mock 只能显式开启。
+ *
+ * 这个默认值曾经是 mock。后果不是「数据是假的」这么轻 —— mock 会**编造成功的
+ * 交易哈希**并把跨链流程一路走完打上「已完成」。所以一次部署忘配环境变量，
+ * 用户看到的就是「跨链成功」，而链上什么都没发生（实测：页面给出的两个哈希在
+ * Atoshi 和 Sepolia 上都查不到，抵押金库余额和 lockedAmount 都是 0）。
+ *
+ * 一个桥的界面里，「静默假装成功」是所有默认值中最危险的一个。现在拼错
+ * VITE_API_MODE 会连不上链并报错，而不是变成演示模式。
  *
  * 桥的 mock 不只是「假数据」，它还模拟了跨链状态机的自动步进和五层限流的
  * 各种边缘场景（setScenario），是产品评审和 QA 验证 UI 分支的唯一手段 ——
@@ -21,20 +31,30 @@ export type ApiMode = 'mock' | 'chain';
 
 export const API_MODE: ApiMode = (() => {
   const mode = (import.meta.env.VITE_API_MODE as string | undefined)?.trim();
-  if (mode === 'chain') {
-    if (!REST_BASE) {
-      throw new Error(
-        'VITE_API_MODE=chain 但没有配置 VITE_REST_URL。' +
-          '桥的链上参数需要节点的 Cosmos REST 端点（app.toml 的 [api]，默认 1317），' +
-          '不是 EVM JSON-RPC（8545）。',
-      );
-    }
-    return 'chain';
+
+  // mock 必须显式写出来。任何其它值（包括拼错、空、未设置）都走真链。
+  if (mode === 'mock') return 'mock';
+
+  if (!REST_BASE) {
+    throw new Error(
+      '没有配置 VITE_REST_URL。桥的链上参数需要节点的 Cosmos REST 端点' +
+        '（app.toml 的 [api]，默认 1317），不是 EVM JSON-RPC（8545）。\n\n' +
+        '要跑不连链的演示模式，显式设 VITE_API_MODE=mock —— 但那个模式会编造' +
+        '交易哈希，绝不能部署给用户。',
+    );
   }
-  return 'mock';
+  return 'chain';
 })();
 
 export const IS_CHAIN_MODE = API_MODE === 'chain';
+
+/**
+ * mock 模式必须在界面上有醒目提示。
+ *
+ * 没有提示的话，mock 和真链在界面上完全一样 —— 这正是「显示跨链成功但链上
+ * 查不到」能一路走到测试同学手上的原因。
+ */
+export const IS_MOCK_MODE = API_MODE === 'mock';
 
 /** 场景切换只有 mock 有。UI 上那个测试面板在 chain 模式下要隐藏。 */
 export const SCENARIOS_AVAILABLE = !IS_CHAIN_MODE;

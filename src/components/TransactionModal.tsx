@@ -308,14 +308,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* 明确提示不可取消的免责声明 */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-start gap-2.5 text-gray-600">
-            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-            <div className="text-[11px] leading-relaxed">
-              <strong className="text-black">{t('tx_modal.notice_title')} </strong>
-              {t('tx_modal.notice_desc')}
-            </div>
-          </div>
         </div>
 
         {/* Modal Footer */}
