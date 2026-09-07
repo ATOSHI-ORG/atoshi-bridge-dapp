@@ -96,7 +96,6 @@ export type BridgeErrorCode =
   | 'daily_cap_reached'
   | 'large_quota_reached'
   | 'address_cap_reached'
-  | 'indivisible_amount'
   | 'bridge_disabled'
   | 'pool_insufficient'
   | 'invalid_address'
