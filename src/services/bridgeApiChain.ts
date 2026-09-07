@@ -1,8 +1,7 @@
 /**
  * 桥的真链实现。
  *
- * 先说清楚现在能做到什么、做不到什么 —— 桥和质押页的处境完全不同，
- * 质押是「全部接通」，桥是「一半接不通」，而且卡点不在前端。
+ * 先说清楚现在能做到什么、做不到什么：
  *
  * ┌─────────────────┬──────────────────────────────────────────────────────┐
  * │ 桥参数           │ ✅ REST /atoshi/bridgeadapter/v1/params               │
@@ -10,19 +9,22 @@
  * │ 五层限流的「上限」 │ ✅ 前端照搬链上 ResolveLimits 算，逐条对过 Go 源码       │
  * │ 五层限流的「已用」 │ ❌ 链上有数据，但 query.proto 没暴露查询                │
  * │ ATOS 余额        │ ✅ bank balances                                     │
- * │ ERC20 余额       │ ⚠️ 以太坊合约调用，合约未部署                          │
- * │ 桥入 (ETH→Atoshi)│ ⚠️ 是以太坊交易，钱包能签，合约未部署                   │
- * │ 桥出 (Atoshi→ETH)│ ❌ MsgBridgeOut 是 Cosmos 消息，无预编译，钱包签不了     │
- * │ 交易历史 / 状态   │ ❌ 无查询接口                                        │
+ * │ ERC20 余额       │ ✅ 以太坊合约调用                                     │
+ * │ 桥入 (ETH→Atoshi)│ ✅ AtosCollateral.transferRemote，两笔交易             │
+ * │ 桥出 (Atoshi→ETH)│ ✅ bridgeadapter 预编译 0x…0808，一笔交易              │
+ * │ 交易历史 / 状态   │ ❌ 无查询接口，需要后端索引                            │
  * └─────────────────┴──────────────────────────────────────────────────────┘
  *
- * 「桥出签不了」这条是硬阻塞，和质押页形成对比：质押能用 EVM 钱包是因为链上开了
- * staking 预编译（0x…0800），桥出没有对应的预编译，而 Atoshi 钱包的原生层只实现了
- * eth_* / wallet_* 方法，没有 Cosmos 签名能力。两条出路都在链侧/钱包侧，见 README。
+ * 桥出为什么要预编译：链上真正执行的是 MsgBridgeOut，一条 Cosmos 消息，而
+ * MetaMask 这类钱包只签 EVM 交易。预编译（0x…0808）是它的 EVM 入口 ——
+ * 和质押能用 EVM 钱包同理（0x…0800）。它是链上 evm params 里
+ * active_static_precompiles 的一项，没有字节码，别用 eth_getCode 去判断它在不在。
  *
  * 做不到的方法一律抛出说明缺什么的错误，不返回假的 tx_hash —— 假成功比失败危险，
  * 用户会以为钱已经在路上了。
  */
+
+import { tr } from '../i18n';
 
 import type {
   AddressBookItem,
@@ -34,6 +36,7 @@ import type {
 import {
   BOND_DENOM,
   ChainRestError,
+  DECIMALS_18,
   amountOf,
   atosToLiao,
   liaoToAtos,
@@ -41,14 +44,23 @@ import {
 } from './chainRest';
 import { bridgeServiceMock } from './bridgeApiMock';
 
-import { ETH_CHAIN_ID, ethChain, toHyperlane32Bytes } from '../wallet/chains';
+import {
+  ATOSHI_CHAIN_ID,
+  ETH_CHAIN_ID,
+  atoshi,
+  ethChain,
+  toHyperlane32Bytes,
+} from '../wallet/chains';
 import { wagmiConfig } from '../wallet/config';
 import {
   COLLATERAL_ADDRESS,
   ERC20_ATOS_ADDRESS,
   ETH_CONTRACTS_READY,
   GAS_LIMITS,
+  BRIDGE_ADAPTER_PRECOMPILE,
+  bridgeAdapterAbi,
   erc20Abi,
+  mailboxAbi,
   tokenRouterAbi,
 } from '../wallet/contracts';
 
@@ -62,9 +74,11 @@ import {
 import {
   getAccount,
   getPublicClient,
+  switchChain,
   waitForTransactionReceipt,
   writeContract,
 } from 'wagmi/actions';
+import { parseEventLogs } from 'viem';
 
 /**
  * viem 2.5x 的 ReadContractParameters 把 authorizationList（EIP-7702 用的）
@@ -78,7 +92,7 @@ export const NO_AUTH_LIST = { authorizationList: undefined } as const;
 function ethClient() {
   const client = getPublicClient(wagmiConfig, { chainId: ETH_CHAIN_ID });
   if (!client) {
-    throw new ChainRestError(`拿不到 chain id ${ETH_CHAIN_ID} 的 RPC client，检查 wagmi 配置。`);
+    throw new ChainRestError(tr('err.no_rpc_client', { chainId: ETH_CHAIN_ID }));
   }
   return client;
 }
@@ -96,7 +110,7 @@ async function migrationPoolAddress(): Promise<string> {
   const acc = (res?.accounts ?? []).find((a: any) => a?.name === 'migration_pool');
   const addr = acc?.base_account?.address;
   if (!addr) {
-    throw new ChainRestError('链上找不到 migration_pool 模块账户，无法读取桥的流动性。');
+    throw new ChainRestError(tr('err.no_migration_pool'));
   }
   migrationPoolAddrCache = addr;
   return addr;
@@ -194,7 +208,7 @@ async function getBridgeLimits(_address?: string): Promise<BridgeLimits> {
 function connectedAddress(): `0x${string}` {
   const { address, isConnected } = getAccount(wagmiConfig);
   if (!isConnected || !address) {
-    throw new ChainRestError('请先连接钱包。');
+    throw new ChainRestError(tr('err.connect_wallet'));
   }
   return address;
 }
@@ -218,31 +232,160 @@ async function getUserBalanceErc20(): Promise<number> {
   return liaoToAtos(raw.toString());
 }
 
-/* ─────────────────────────── 桥出（阻塞） ─────────────────────────── */
+/* ─────────────────────────── 桥出 ─────────────────────────── */
+
+/**
+ * 确保钱包连在指定的链上，不对就请钱包切。
+ *
+ * 桥的两个方向在**不同的链**上发交易：桥入是以太坊交易，桥出是 Atoshi 交易。
+ * 只报错「请先切链」的话用户没有能点的东西 —— 页面上没有切链按钮，
+ * 而钱包里手动加一条 Atoshi 网络对测试同学是另一件事。
+ *
+ * 用户可能在钱包弹窗里拒绝，那就把原来那句话抛出去，此时它是准确的。
+ */
+async function ensureChain(want: number, errKey: string): Promise<void> {
+  const { chainId } = getAccount(wagmiConfig);
+  if (chainId === want) return;
+  try {
+    await switchChain(wagmiConfig, { chainId: want });
+  } catch {
+    throw new ChainRestError(tr(errKey, { want, got: String(chainId) }));
+  }
+  // 切完再核一遍：有些钱包的 switch 会 resolve 但实际没切（用户在钱包里
+  // 手动切回去了，或者钱包里没有这条网络却没报错）。
+  if (getAccount(wagmiConfig).chainId !== want) {
+    throw new ChainRestError(tr(errKey, { want, got: String(getAccount(wagmiConfig).chainId) }));
+  }
+}
+
+/**
+ * 从收据里解 Hyperlane 的 messageId。
+ *
+ * EVM 交易拿不到函数返回值，messageId 只能从日志里解。没有它，用户手上只有
+ * 一个源链 tx hash —— 那个 hash 在目标链上查不到任何东西，而「显示成功但目标链
+ * 查不到」正是测试报上来最严重的那个问题的形状。
+ *
+ * 用 `parseEventLogs` 而不是自己比对 topic0：它会跳过解不开的日志，所以同一笔
+ * 交易里其它合约的事件不会让整个解析失败。
+ */
+function messageIdFrom(logs: readonly unknown[]): string {
+  for (const [abi, eventName, field] of [
+    [bridgeAdapterAbi, 'BridgeOut', 'messageId'],
+    [mailboxAbi, 'DispatchId', 'messageId'],
+  ] as const) {
+    const parsed = parseEventLogs({ abi, eventName, logs: logs as never });
+    const hit = parsed[0]?.args as Record<string, unknown> | undefined;
+    const id = hit?.[field];
+    if (typeof id === 'string' && /^0x[0-9a-f]{64}$/i.test(id)) return id;
+  }
+  // 解不出来就给空串，不编一个 —— 上层显示成「暂无」，用户至少不会拿着假 id 去查。
+  return '';
+}
 
 /**
  * 桥出：Atoshi → Ethereum。
  *
- * 现在做不了，原因很具体：链上的 MsgBridgeOut 是一条 Cosmos 消息，而
- *  - 链上没有 bridgeadapter 的 EVM 预编译（有的只有 staking/distribution/bank
- *    /gov/ics20 那几个官方的），所以它变不成一笔以太坊交易；
- *  - Atoshi 钱包原生层只实现了 eth_* / wallet_* 方法，没有 Cosmos 签名能力。
+ * 走 bridgeadapter 预编译（0x…0808）。它是 MsgBridgeOut 的 EVM 入口 ——
+ * 链上真正执行的是那条 Cosmos 消息，而 EVM 钱包只签 EVM 交易，所以没有这个
+ * 预编译的话，这个按钮在钱包里根本没有能调的东西。
  *
- * 两条出路都不在前端，见 README「桥出为什么还不能用」。
+ * 和桥入不一样，这边**只有一笔**交易：锁的是原生 ATOS，不是 ERC20，
+ * 不需要 approve。
  *
- * 抛错而不是返回假的 tx_hash：桥出涉及真金白银，假成功会让用户以为钱在路上，
- * 然后去等一笔根本不存在的到账。
+ * 三条会 revert 的前提，都在发交易之前先查掉，因为链上的 revert 只有一句
+ * 字符串，在钱包里看不出是哪一条：
+ *   1. 钱包必须连在 Atoshi（不是以太坊侧）；
+ *   2. 金额必须是 atos_per_erc20 的整数倍 —— 余数在以太坊侧表示不出来，
+ *      链上宁可 revert 也不会悄悄吞掉；
+ *   3. 金额必须 ≥ min_transfer_out。
  */
-async function submitBridgeOut(_data: {
+async function submitBridgeOut(data: {
   sender: string;
   recipient_eth_address: string;
   amount_atos: number;
-}): Promise<never> {
-  throw new ChainRestError(
-    '桥出功能尚未开通。链上的 MsgBridgeOut 是 Cosmos 消息，' +
-      '需要链侧提供 bridgeadapter 预编译、或钱包支持 Cosmos 交易签名，' +
-      '两者目前都没有。桥入不受影响。',
-  );
+}): Promise<{ tx_hash: string; message_id: string; record: BridgeRecord }> {
+  const owner = connectedAddress();
+  await ensureChain(ATOSHI_CHAIN_ID, 'err.wrong_chain_for_out');
+
+  // 参数现查，不写死：peg 和下限都是治理可改的参数。
+  const params = await getBridgeParams();
+  if (!params.bridge_enabled) {
+    throw new ChainRestError(tr('err.bridge_disabled'));
+  }
+
+  // getBridgeParams 返回的是 ATOS 单位，链上的参数是 liao —— 别混。
+  const amount = BigInt(atosToLiao(data.amount_atos));
+  const peg = BigInt(params.atos_per_erc20);
+  const pegLiao = peg * DECIMALS_18;
+  if (pegLiao > 0n && amount % pegLiao !== 0n) {
+    throw new ChainRestError(tr('err.not_peg_multiple', { peg: params.atos_per_erc20 }));
+  }
+  if (data.amount_atos < params.min_transfer_out) {
+    throw new ChainRestError(tr('err.below_min_out', { min: params.min_transfer_out }));
+  }
+
+  const recipient = toHyperlane32Bytes(data.recipient_eth_address);
+
+  const hash = await writeContract(wagmiConfig, {
+    account: owner,
+    chain: atoshi,
+    address: BRIDGE_ADAPTER_PRECOMPILE,
+    abi: bridgeAdapterAbi,
+    functionName: 'bridgeOut',
+    // maxFeeAmount = 0：不设跨链费上限。设了上限而费用涨过它就会 revert，
+    // 而用户看到的是一句和金额无关的报错，比多付一点点费更难解释。
+    args: [recipient, amount, 0n],
+    gas: GAS_LIMITS.bridgeOut,
+  });
+
+  const receipt = await waitForTransactionReceipt(wagmiConfig, {
+    hash,
+    chainId: ATOSHI_CHAIN_ID,
+  });
+  if (receipt.status !== 'success') {
+    throw new ChainRestError(tr('err.bridge_reverted', { tx: hash }));
+  }
+
+  const now = Date.now();
+  return {
+    tx_hash: hash,
+    message_id: messageIdFrom(receipt.logs),
+    record: {
+      id: hash,
+      direction: 'out' as BridgeDirection,
+      amount: data.amount_atos,
+      receivedAmount: data.amount_atos / Number(params.atos_per_erc20 || 100),
+      sender: data.sender || owner,
+      recipient: data.recipient_eth_address,
+      status: 'dispatched',
+      currentStep: 2,
+      steps: [
+        {
+          id: 1,
+          nameKey: 'step.out.1.name',
+          descKey: 'step.out.1.desc',
+          name: '',
+          description: '',
+          status: 'completed',
+          timestamp: now,
+          txHash: hash,
+        },
+        {
+          id: 2,
+          nameKey: 'step.out.2.name',
+          descKey: 'step.out.2.desc',
+          name: '',
+          description: '',
+          status: 'processing',
+          timestamp: now,
+        },
+      ],
+      sourceTxHash: hash,
+      createdAt: now,
+      updatedAt: now,
+      estimatedTimeRange: '',
+    },
+  };
 }
 
 /* ─────────────────────────── 桥入 ─────────────────────────── */
@@ -266,18 +409,12 @@ async function submitBridgeIn(data: {
 }): Promise<{ tx_hash: string; message_id: string; record: BridgeRecord }> {
   if (!ETH_CONTRACTS_READY) {
     throw new ChainRestError(
-      '以太坊侧合约还未部署。需要配置 VITE_ERC20_ATOS_ADDRESS 和 ' +
-        'VITE_COLLATERAL_ADDRESS（Hyperlane HypERC20Collateral 的地址）。',
+      tr('err.contracts_missing'),
     );
   }
 
   const owner = connectedAddress();
-  const { chainId } = getAccount(wagmiConfig);
-  if (chainId !== ETH_CHAIN_ID) {
-    throw new ChainRestError(
-      `桥入需要钱包连在以太坊侧（chain id ${ETH_CHAIN_ID}），当前是 ${chainId}。请先切链。`,
-    );
-  }
+  await ensureChain(ETH_CHAIN_ID, 'err.wrong_chain_for_in');
 
   const amount = BigInt(atosToLiao(data.amount_erc20));
   const recipient = toHyperlane32Bytes(data.recipient_atoshi_address);
@@ -293,7 +430,7 @@ async function submitBridgeIn(data: {
   });
   if (wrapped.toLowerCase() !== ERC20_ATOS_ADDRESS!.toLowerCase()) {
     throw new ChainRestError(
-      `配置不一致：金库锁的是 ${wrapped}，但 VITE_ERC20_ATOS_ADDRESS 配的是 ${ERC20_ATOS_ADDRESS}。`,
+      tr('err.token_mismatch', { wrapped, configured: String(ERC20_ATOS_ADDRESS) }),
     );
   }
 
@@ -321,7 +458,7 @@ async function submitBridgeIn(data: {
       chainId: ETH_CHAIN_ID,
     });
     if (approveReceipt.status !== 'success') {
-      throw new ChainRestError(`授权交易失败（reverted），tx: ${approveHash}`);
+      throw new ChainRestError(tr('err.approve_reverted', { tx: approveHash }));
     }
   }
 
@@ -347,16 +484,15 @@ async function submitBridgeIn(data: {
 
   const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, chainId: ETH_CHAIN_ID });
   if (receipt.status !== 'success') {
-    throw new ChainRestError(`跨链交易已上链但执行失败（reverted），tx: ${hash}`);
+    throw new ChainRestError(tr('err.bridge_reverted', { tx: hash }));
   }
 
   const now = Date.now();
   return {
     tx_hash: hash,
     // messageId 是 transferRemote 的返回值，但 EVM 交易拿不到返回值 ——
-    // 要从 Hyperlane Mailbox 的 Dispatch 事件里解。等有了合约地址再补，
-    // 现在给空字符串而不是编一个假的。
-    message_id: '',
+    // 从 Mailbox 的 DispatchId 事件里解。
+    message_id: messageIdFrom(receipt.logs),
     record: {
       id: hash,
       direction: 'in' as BridgeDirection,
@@ -421,7 +557,7 @@ async function getBridgeStatus(_messageId: string): Promise<BridgeRecord | null>
 }
 
 async function retryBridgeIn(_recordId: string): Promise<boolean> {
-  throw new ChainRestError('重试需要后端索引服务支持，目前不可用。');
+  throw new ChainRestError(tr('err.retry_unavailable'));
 }
 
 /* ─────────────────────────── 导出 ─────────────────────────── */

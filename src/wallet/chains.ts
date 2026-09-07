@@ -8,6 +8,8 @@
  * 签错链的后果不是失败而是「发到另一条链上的一笔无意义交易」，钱照样花掉。
  */
 
+import { tr } from '../i18n';
+
 import { bech32 } from 'bech32';
 import { defineChain } from 'viem';
 import { sepolia, mainnet } from 'viem/chains';
@@ -59,7 +61,7 @@ export const ethChain = ETH_CHAIN_ID === mainnet.id ? mainnet : sepolia;
 export function hexToBech32(hex: string, prefix = BECH32_PREFIX): string {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
   if (!/^[0-9a-fA-F]{40}$/.test(clean)) {
-    throw new Error(`不是合法的 EVM 地址: ${hex}`);
+    throw new Error(tr('err.bad_evm_addr', { addr: hex }));
   }
   const bytes = new Uint8Array(20);
   for (let i = 0; i < 20; i++) bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
@@ -70,7 +72,7 @@ export function bech32ToHex(addr: string): `0x${string}` {
   const { words } = bech32.decode(addr);
   const bytes = bech32.fromWords(words);
   if (bytes.length !== 20) {
-    throw new Error(`地址解出来是 ${bytes.length} 字节，期望 20 字节: ${addr}`);
+    throw new Error(tr('err.bad_addr_len', { got: bytes.length, addr }));
   }
   return `0x${Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -88,7 +90,7 @@ export function toHyperlane32Bytes(addr: string): `0x${string}` {
   const hex = addr.startsWith('0x') ? addr : bech32ToHex(addr);
   const clean = hex.slice(2).toLowerCase();
   if (clean.length === 64) return `0x${clean}` as `0x${string}`;
-  if (clean.length !== 40) throw new Error(`地址长度不对，无法转成 32 字节: ${addr}`);
+  if (clean.length !== 40) throw new Error(tr('err.bad_addr_pad', { addr }));
   return `0x${'0'.repeat(24)}${clean}` as `0x${string}`;
 }
 

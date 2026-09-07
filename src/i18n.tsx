@@ -355,6 +355,25 @@ export const translations = {
     'error.load_chain_data': 'Could not read chain data',
     'error.bridge_out_failed': 'Bridge out failed',
     'error.bridge_in_failed': 'Bridge in failed',
+    'err.rest_not_configured': 'VITE_REST_URL is not set. The bridge reads its chain parameters from the node Cosmos REST endpoint ([api] in app.toml, 1317 by default).',
+    'err.http_failed': 'Request failed (HTTP {status})',
+    'err.timeout': 'Request timed out after {ms}ms',
+    'err.node_unreachable': 'Cannot reach the node. Check that VITE_REST_URL is reachable, that the node [api] is enabled, and that it allows cross-origin requests.',
+    'err.no_rpc_client': 'No RPC client for chain id {chainId}. Check the wagmi configuration.',
+    'err.no_migration_pool': 'The migration_pool module account is not on chain, so the bridge liquidity cannot be read.',
+    'err.connect_wallet': 'Connect a wallet first.',
+    'err.contracts_missing': 'The Ethereum contracts are not configured. Set VITE_ERC20_ATOS_ADDRESS and VITE_COLLATERAL_ADDRESS.',
+    'err.wrong_chain_for_in': 'Bridging in needs the wallet on Ethereum (chain id {want}); it is on {got}. Switch chains first.',
+    'err.token_mismatch': 'Configuration mismatch: the vault locks {wrapped}, but VITE_ERC20_ATOS_ADDRESS is {configured}.',
+    'err.approve_reverted': 'The approval transaction reverted. tx: {tx}',
+    'err.bridge_reverted': 'The transfer was included in a block but reverted. tx: {tx}',
+    'err.retry_unavailable': 'Retrying needs a backend indexer, which is not available.',
+    'err.bad_evm_addr': 'Not a valid EVM address: {addr}',
+    'err.bad_addr_len': 'The address decodes to {got} bytes, expected 20: {addr}',
+    'err.bad_addr_pad': 'Address length is wrong, cannot pad to 32 bytes: {addr}',
+    'err.wrong_chain_for_out': 'Bridging out needs the wallet on Atoshi (chain id {want}); it is on {got}. Switch chains first.',
+    'err.not_peg_multiple': 'The amount must be a whole multiple of {peg} ATOS. A remainder cannot be represented on the Ethereum side, so the chain rejects it rather than dropping it.',
+    'err.below_min_out': 'The amount is below the on-chain minimum of {min} ATOS per transfer.',
 },
 
   zh: {
@@ -701,6 +720,25 @@ export const translations = {
     'error.load_chain_data': '读取链上数据失败',
     'error.bridge_out_failed': '跨链转出失败',
     'error.bridge_in_failed': '跨链转入失败',
+    'err.rest_not_configured': '未配置 VITE_REST_URL。桥的链上参数需要节点的 Cosmos REST 端点（app.toml 的 [api]，默认 1317）。',
+    'err.http_failed': '请求失败 (HTTP {status})',
+    'err.timeout': '请求超时 ({ms}ms)',
+    'err.node_unreachable': '连不上节点。检查 VITE_REST_URL 是否可达、节点 [api] 是否开启、是否允许跨域。',
+    'err.no_rpc_client': '拿不到 chain id {chainId} 的 RPC client，检查 wagmi 配置。',
+    'err.no_migration_pool': '链上找不到 migration_pool 模块账户，无法读取桥的流动性。',
+    'err.connect_wallet': '请先连接钱包。',
+    'err.contracts_missing': '以太坊侧合约地址没配。需要设置 VITE_ERC20_ATOS_ADDRESS 和 VITE_COLLATERAL_ADDRESS。',
+    'err.wrong_chain_for_in': '桥入需要钱包连在以太坊侧（chain id {want}），当前是 {got}。请先切链。',
+    'err.token_mismatch': '配置不一致：金库锁的是 {wrapped}，但 VITE_ERC20_ATOS_ADDRESS 配的是 {configured}。',
+    'err.approve_reverted': '授权交易失败（reverted），tx: {tx}',
+    'err.bridge_reverted': '跨链交易已上链但执行失败（reverted），tx: {tx}',
+    'err.retry_unavailable': '重试需要后端索引服务支持，目前不可用。',
+    'err.bad_evm_addr': '不是合法的 EVM 地址: {addr}',
+    'err.bad_addr_len': '地址解出来是 {got} 字节，期望 20 字节: {addr}',
+    'err.bad_addr_pad': '地址长度不对，无法转成 32 字节: {addr}',
+    'err.wrong_chain_for_out': '桥出需要钱包连在 Atoshi（chain id {want}），当前是 {got}。请先切链。',
+    'err.not_peg_multiple': '金额必须是 {peg} ATOS 的整数倍。余数在以太坊侧表示不出来，链上会拒绝而不是悄悄吞掉。',
+    'err.below_min_out': '金额低于链上的单笔下限 {min} ATOS。',
 },
 };
 
@@ -709,6 +747,40 @@ const I18nContext = createContext<I18nContextType>({
   setLang: () => {},
   t: (key: string) => key,
 });
+
+/**
+ * 不依赖 React context 的翻译函数，给服务层用。
+ *
+ * chainRest.ts / bridgeApiChain.ts 是纯 TS，拿不到 useI18n() 的 t()，所以它们
+ * 抛出的错误信息一直只有中文 —— 切成英文也是中文。而这些信息是会显示给用户的
+ * （连不上节点、请先切链、合约未部署都走 alert 或页面上的错误条）。
+ *
+ * 语言从 localStorage 读，和 I18nProvider 用同一个 key。这里刻意不缓存：
+ * 用户切语言之后下一次报错就要用新语言，而这些调用都在错误路径上，
+ * 每次读一下 localStorage 的开销无所谓。
+ *
+ * 读不到就退回英文，和 provider 的默认值一致。
+ */
+export function tr(key: string, params?: Record<string, string | number>): string {
+  let lang: Language = 'en';
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === 'zh' || saved === 'en') lang = saved;
+  } catch {
+    // localStorage 可能不可用（隐私模式），退回英文
+  }
+  const dict = translations[lang] || translations.en;
+  let text =
+    (dict as Record<string, string>)[key] ||
+    (translations.en as Record<string, string>)[key] ||
+    key;
+  if (params) {
+    Object.entries(params).forEach(([pKey, pVal]) => {
+      text = text.replace(new RegExp(`\\{${pKey}\\}`, 'g'), String(pVal));
+    });
+  }
+  return text;
+}
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lang, setLangState] = useState<Language>(() => {
