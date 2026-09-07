@@ -27,14 +27,26 @@ export function formatEthAddressTo32Bytes(ethAddress: string): string {
 }
 
 /**
- * 校验 Atoshi 地址合法性 (bech32 格式，以 atoshi1 开头)
+ * 校验 Atoshi 收款地址。**0x 和 atoshi1 两种都算合法。**
+ *
+ * Atoshi 是 Ethermint 系的链，一个账户同时有这两种表示，指的是同一个账户 ——
+ * 底层就是同一个 20 字节。而链上收款时（asset_bridge.go 的
+ * CosmosAddressFromHyperlane）取的是 Hyperlane 32 字节里的低 20 字节，
+ * 所以 0x 地址左侧补零之后和 bech32 解出来的字节完全一致。
+ *
+ * 只收 bech32 是没必要的限制：用户从 MetaMask 过来，手上有的是 0x 地址，
+ * 让他自己去找 bech32 形式是凭空加一步。实测三笔桥入用的都是 0x 形式，
+ * 钱都正常落到对应的 atoshi1 账户上。
+ *
+ * 大小写不校验 EIP-55 校验和：字节相同就是同一个账户，而 MetaMask 给的是
+ * 带校验和的混合大小写，用户手抄可能全小写 —— 拒掉纯粹是添麻烦。
  */
 export function isValidAtoshiAddress(address: string): boolean {
   if (!address) return false;
   const trimmed = address.trim();
-  // Atoshi bech32 格式：atoshi1 开头后接 38~59 字符
-  const atoshiRegex = /^atoshi1[a-z0-9]{38,59}$/;
-  return atoshiRegex.test(trimmed);
+  if (/^0x[0-9a-fA-F]{40}$/.test(trimmed)) return true;
+  // bech32：atoshi1 开头后接 38~59 字符
+  return /^atoshi1[a-z0-9]{38,59}$/.test(trimmed);
 }
 
 /**
