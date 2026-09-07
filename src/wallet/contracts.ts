@@ -134,6 +134,15 @@ export const bridgeAdapterAbi = [
  */
 export const mailboxAbi = [
   {
+    // 投递状态。桥出（Atoshi -> Sepolia）靠这一个 eth_call 就能确认到账，
+    // 不用翻日志、也不用靠余额猜。
+    type: 'function',
+    name: 'delivered',
+    stateMutability: 'view',
+    inputs: [{ name: 'messageId', type: 'bytes32' }],
+    outputs: [{ type: 'bool' }],
+  },
+  {
     type: 'event',
     name: 'Dispatch',
     inputs: [
@@ -163,6 +172,18 @@ export const ERC20_ATOS_ADDRESS = addr(import.meta.env.VITE_ERC20_ATOS_ADDRESS a
 export const COLLATERAL_ADDRESS = addr(import.meta.env.VITE_COLLATERAL_ADDRESS as string);
 
 export const ETH_CONTRACTS_READY = Boolean(ERC20_ATOS_ADDRESS && COLLATERAL_ADDRESS);
+
+/**
+ * 以太坊侧的 Hyperlane Mailbox。
+ *
+ * 这是 Hyperlane 官方在 Sepolia 上的公共 Mailbox，不是我们部署的 ——
+ * 上面跑着几十个项目，nonce 已经 87 万多。我们只用它来查自己消息的投递状态。
+ *
+ * 留成可配置：换网（主网）或者以后自己部署 Mailbox 时要改。
+ */
+export const SEPOLIA_MAILBOX =
+  addr(import.meta.env.VITE_ETH_MAILBOX_ADDRESS as string) ??
+  ('0xfFAEF09B3cd11D9b20d1a19bECca54EEC2884766' as `0x${string}`);
 
 /** 桥入两笔交易的 gas 上限。approve 是标准 ERC20，transferRemote 要发跨链消息所以更贵。 */
 export const GAS_LIMITS = {
