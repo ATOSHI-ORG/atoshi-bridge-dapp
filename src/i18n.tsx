@@ -369,6 +369,9 @@ export const translations = {
     'err.not_peg_multiple': 'The amount has more decimal places than the bridge can represent. Round it to a whole ATOS and try again.',
     'err.below_min_out': 'The amount is below the on-chain minimum of {min} ATOS per transfer.',
     'bridge_in.same_account': 'Same account:',
+    'toast.arrived_title': 'Transfer arrived',
+    'toast.view_detail': 'View details',
+    'toast.dismiss': 'Dismiss',
 },
 
   zh: {
@@ -729,6 +732,9 @@ export const translations = {
     'err.not_peg_multiple': '金额的小数位超出了桥能表示的精度。取整到整数 ATOS 再试。',
     'err.below_min_out': '金额低于链上的单笔下限 {min} ATOS。',
     'bridge_in.same_account': '同一个账户：',
+    'toast.arrived_title': '跨链已到账',
+    'toast.view_detail': '查看详情',
+    'toast.dismiss': '关闭提示',
 },
 };
 
