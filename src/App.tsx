@@ -24,6 +24,7 @@ import { RulesExplanationModal } from './components/RulesExplanationModal';
 import { TransactionModal } from './components/TransactionModal';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { FAQAndSupportModal } from './components/FAQAndSupportModal';
+import { ArrivalToast } from './components/ArrivalToast';
 import { ShieldX } from 'lucide-react';
 import { useI18n } from './i18n';
 import { loadRecords, mergeRecords, patchRecord, saveRecord } from './services/bridgeRecords';
@@ -52,7 +53,23 @@ export default function App() {
   const [isRulesModalOpen, setIsRulesModalOpen] = useState<boolean>(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState<boolean>(false);
   const [isFAQModalOpen, setIsFAQModalOpen] = useState<boolean>(false);
-  const [activeRecord, setActiveRecord] = useState<BridgeRecord | null>(null);
+  /**
+   * 弹窗里显示哪条记录 —— 只存 id，记录本身从 records 里派生。
+   *
+   * 原来直接存整个 record 对象，结果关不掉：fetchData 的依赖里有
+   * activeRecord，而它内部又 setActiveRecord(新解析出来的对象)。新对象身份
+   * 不同 → 依赖变 → fetchData 重建 → effect 重跑 → 立刻再 fetch → 再设新
+   * 对象，一直转。用户点关闭时 activeRecord 变 null，但**已经在飞行中**的
+   * 那次 fetchData 闭包里还是旧的非空值，它完成时又把弹窗设回来 ——
+   * 循环转得快，几乎总有一次在飞行中，所以弹窗关不掉。
+   *
+   * 存 id 就没这个问题：派生值没法自己复活，而且状态更新只走一条路
+   * （records），不会有两份可能不一致的副本。
+   */
+  const [activeRecordId, setActiveRecordId] = useState<string | null>(null);
+
+  // 刚确认到账的那条 —— 用来弹提示。存 id，和 activeRecordId 同理。
+  const [arrivedId, setArrivedId] = useState<string | null>(null);
   const [selectedTxIdForSupport, setSelectedTxIdForSupport] = useState<string | undefined>(undefined);
 
   // 钱包给的是 0x 地址，Cosmos REST 的查询路径只认 atoshi1…，useWallet 里已转好。
@@ -67,6 +84,17 @@ export default function App() {
 
   // 同一个账户的两种表示，用来筛出「属于我的」本地记录。
   // 桥入的 sender 是 0x（以太坊侧），桥出的 sender 是 atoshi1 —— 两个都要。
+  const arrivedRecord = useMemo(
+    () => (arrivedId ? records.find((r) => r.id === arrivedId) ?? null : null),
+    [arrivedId, records],
+  );
+
+  // 弹窗显示的记录：从 records 里按 id 取。找不到就是 null（弹窗自然关掉）。
+  const activeRecord = useMemo(
+    () => (activeRecordId ? records.find((r) => r.id === activeRecordId) ?? null : null),
+    [activeRecordId, records],
+  );
+
   const addressForms = useMemo(
     () => [currentAddress, currentEthAddress].filter(Boolean),
     [currentAddress, currentEthAddress],
@@ -102,14 +130,8 @@ export default function App() {
         setBalanceAtos(atos);
         setBalanceErc20(erc20);
 
-        // 正开着的交易弹窗要跟着刷新状态。
-        // 从合并后的列表里找，不是从服务端那个空列表里找 —— 后者永远找不到，
-        // 所以弹窗里的状态原来根本不会更新。
-        if (activeRecord) {
-          const updated = mergeRecords(loadRecords(addressForms), fetchedHistory.list)
-            .find((r) => r.id === activeRecord.id);
-          if (updated) setActiveRecord(updated);
-        }
+        // 弹窗不用在这里同步 —— 它显示的记录是从 records 派生的（见
+        // activeRecordId），records 一更新弹窗自然跟着变。
       } else {
         setRecords([]);
         setBalanceAtos(0);
@@ -122,7 +144,7 @@ export default function App() {
       // 看起来一切正常，是最难排查的一种故障。
       setLoadError(e?.message || t('error.load_chain_data'));
     }
-  }, [currentAddress, activeRecord, addressForms]);
+  }, [currentAddress, addressForms]);
 
   // 收款地址跟着钱包走：连上就填自己的地址，断开就清空。
   //
@@ -182,7 +204,9 @@ export default function App() {
         patchRecord(updated.id, updated);
         if (cancelled) return;
         setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-        setActiveRecord((prev) => (prev && prev.id === updated.id ? updated : prev));
+        // 到账了就弹提示 —— 用户大概率已经关掉弹窗了（跨链要一分钟左右，
+        // 没人会一直盯着）。不弹的话他只能自己去翻历史才知道成了。
+        setArrivedId(updated.id);
       }
     };
 
@@ -209,7 +233,10 @@ export default function App() {
       // fetchData 会把刚产生的记录冲掉，只剩 activeRecord 一个孤立引用，
       // 关掉弹窗就再也找不回来。
       saveRecord(res.record);
-      setActiveRecord(res.record);
+      // 先塞进 records 再开弹窗。activeRecord 是从 records 派生的，
+      // 不这么做的话弹窗要等下一轮 fetchData 才有内容，会闪一下空白。
+      setRecords((prev) => mergeRecords([res.record], prev));
+      setActiveRecordId(res.record.id);
       await fetchData();
     } catch (err: any) {
       alert(`${t('error.bridge_out_failed')}: ${err.message}`);
@@ -231,7 +258,10 @@ export default function App() {
       // fetchData 会把刚产生的记录冲掉，只剩 activeRecord 一个孤立引用，
       // 关掉弹窗就再也找不回来。
       saveRecord(res.record);
-      setActiveRecord(res.record);
+      // 先塞进 records 再开弹窗。activeRecord 是从 records 派生的，
+      // 不这么做的话弹窗要等下一轮 fetchData 才有内容，会闪一下空白。
+      setRecords((prev) => mergeRecords([res.record], prev));
+      setActiveRecordId(res.record.id);
       await fetchData();
     } catch (err: any) {
       alert(`${t('error.bridge_in_failed')}: ${err.message}`);
@@ -389,7 +419,7 @@ export default function App() {
       {/* 3. 四步状态机进度追踪弹窗 */}
       <TransactionModal
         isOpen={!!activeRecord}
-        onClose={() => setActiveRecord(null)}
+        onClose={() => setActiveRecordId(null)}
         record={activeRecord}
         onOpenSupport={(recordId) => {
           setSelectedTxIdForSupport(recordId);
@@ -405,8 +435,17 @@ export default function App() {
         records={records}
         onSelectRecord={(rec) => {
           setIsHistoryDrawerOpen(false);
-          setActiveRecord(rec);
+          setActiveRecordId(rec.id);
         }}
+      />
+
+      <ArrivalToast
+        record={arrivedRecord}
+        onView={() => {
+          setArrivedId(null);
+          setActiveRecordId(arrivedRecord?.id ?? null);
+        }}
+        onDismiss={() => setArrivedId(null)}
       />
 
       {/* 5. 常见问题与客服支持弹窗 */}

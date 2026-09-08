@@ -144,7 +144,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                             ? t('tx_modal.status_completed')
                             : isWaiting
                             ? t('tx_modal.status_waiting_liquidity')
-                            : `${t('tx_modal.status_processing')} (${item.currentStep}/4)`}
+                            : `${t('tx_modal.status_processing')} (${item.currentStep}/${item.steps.length})`}
                         </span>
                       </div>
 

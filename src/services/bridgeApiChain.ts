@@ -356,6 +356,14 @@ async function submitBridgeOut(data: {
     message_id: messageIdFrom(receipt.logs),
     record: {
       id: hash,
+      // messageId 必须写进 record 里，不能只放在响应顶层。
+      //
+      // 到账确认（bridgeStatus.ts）唯一能跨两条链把一笔对应起来的东西就是它：
+      // 桥入按 message_id 检索 Atoshi 的 bridge_in 事件，桥出问 Mailbox 的
+      // delivered()。record.messageId 是 undefined 的话 confirmDelivery 一律
+      // 返回 unknown，状态永远停在「进行中」—— 链上早就成功了，前端还显示
+      // 进行中，正是测试反馈的那个问题。
+      messageId: messageIdFrom(receipt.logs),
       direction: 'out' as BridgeDirection,
       amount: data.amount_atos,
       receivedAmount: data.amount_atos / Number(params.atos_per_erc20 || 100),
@@ -499,6 +507,14 @@ async function submitBridgeIn(data: {
     message_id: messageIdFrom(receipt.logs),
     record: {
       id: hash,
+      // messageId 必须写进 record 里，不能只放在响应顶层。
+      //
+      // 到账确认（bridgeStatus.ts）唯一能跨两条链把一笔对应起来的东西就是它：
+      // 桥入按 message_id 检索 Atoshi 的 bridge_in 事件，桥出问 Mailbox 的
+      // delivered()。record.messageId 是 undefined 的话 confirmDelivery 一律
+      // 返回 unknown，状态永远停在「进行中」—— 链上早就成功了，前端还显示
+      // 进行中，正是测试反馈的那个问题。
+      messageId: messageIdFrom(receipt.logs),
       direction: 'in' as BridgeDirection,
       amount: data.amount_erc20,
       receivedAmount: data.amount_erc20 * 100, // peg: 1 ERC20 = 100 ATOS
