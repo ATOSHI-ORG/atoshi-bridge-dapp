@@ -71,11 +71,34 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
   // 地址合法性校验
   const isEthAddressValid = isValidEthereumAddress(recipientEth);
 
-  // 点击“最大”按钮：填入根据五层计算出的 max_transferable
+  /**
+   * 点击「最大」。
+   *
+   * 原来只填 limits.max_transferable —— 那是五层限流算出的**额度上限**，
+   * 和钱包里有多少钱毫无关系。所以余额 999,781 的账户点一下就填进
+   * 100,000,000，然后立刻显示「钱包余额不足」。测试反馈的就是这个。
+   *
+   * 三件事要一起考虑：
+   *
+   *   余额        显然的上限
+   *   限流上限    链上会拒的上限
+   *   gas 预留    桥出本身要付 gas，全部转走就没钱付了。预留 1 ATOS ——
+   *               实际成本约 0.0007 ATOS（gasLimit 60 万 x gasPrice 1.1 gwei），
+   *               1 ATOS 是它的一千多倍，而相对 1,000 ATOS 的单笔下限可以忽略。
+   *
+   * 再向下取整到整数 ATOS：界面上显示的余额是四舍五入过的，直接把浮点值填进去
+   * 可能比真实余额大那么一点点，交易会在链上 revert —— 而报错和金额看着没关系。
+   * 桥出下限是 1,000 ATOS，抹掉不到 1 ATOS 无所谓。
+   *
+   * 算出来低于下限时照样填 —— 让已有的校验提示「低于单笔最低限额」，
+   * 那句话准确而且告诉了用户他现在的处境；填 0 反而看不出为什么。
+   */
   const handleSetMax = () => {
     if (!limits) return;
-    const maxVal = limits.max_transferable;
-    setAmountStr(String(maxVal > 0 ? maxVal : 0));
+    const GAS_RESERVE_ATOS = 1;
+    const spendable = Math.max(0, userBalance - GAS_RESERVE_ATOS);
+    const capped = Math.min(spendable, limits.max_transferable);
+    setAmountStr(String(Math.floor(capped)));
   };
 
   // 采纳建议金额（例如整除 100 建议、大额降为 100k 等）
