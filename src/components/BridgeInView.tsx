@@ -69,8 +69,18 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
   // 余额校验
   const isBalanceEnough = amountErc20Num > 0 && amountErc20Num <= userErc20Balance;
 
+  /**
+   * 点击「最大」。桥入不用预留 gas —— 这边的 gas 付的是 ETH，不占 ERC20。
+   *
+   * 但要向下取整：界面上的余额是四舍五入过的，直接把浮点值填进去可能比真实
+   * 余额大一点点，approve/transferRemote 会 revert 在一个和金额看着无关的地方。
+   *
+   * 取到 6 位小数而不是整数：桥入**没有**下限（链上只要求 > 0），0.5 个 ERC20
+   * 是合法的一笔（换 50 ATOS），取整会把它抹成 0。桥出那边下限是 1,000 ATOS，
+   * 所以那边取整到整数无所谓 —— 两边不一样是因为下限不一样。
+   */
   const handleSetMax = () => {
-    setAmountErc20Str(String(userErc20Balance));
+    setAmountErc20Str(String(Math.floor(userErc20Balance * 1e6) / 1e6));
   };
 
 
