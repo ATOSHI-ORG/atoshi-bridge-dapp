@@ -58,11 +58,15 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
   const isLargeInput = inputAmount > params.small_transfer_threshold;
 
   // 进度计算 (剩余 / 总量)
-  const globalPercent = Math.min(100, Math.max(0, (limits.global_remaining / limits.global_total) * 100));
+  const globalPercent = limits.global_total > 0
+    ? Math.min(100, Math.max(0, (limits.global_remaining / limits.global_total) * 100))
+    : 0;
   const largePercent = limits.large_total > 0
     ? Math.min(100, Math.max(0, (limits.large_remaining / limits.large_total) * 100))
     : 0;
-  const addressPercent = Math.min(100, Math.max(0, (limits.address_remaining / limits.address_total) * 100));
+  const addressPercent = limits.address_total > 0
+    ? Math.min(100, Math.max(0, (limits.address_remaining / limits.address_total) * 100))
+    : 0;
 
   return (
     <div
@@ -73,10 +77,9 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
     >
       {/* 危机模式橙色紧急提示条 */}
       {/*
-        已用量未知时必须说出来。链上有这三个数（bridgeadapter keeper 的
-        GetRateLimitState / GetAddressUsage），但 query.proto 没暴露查询，
-        所以 *_remaining 只能等于 *_total。不提示的话用户会以为额度是满的，
-        按满额填金额，然后在链上被限流拒掉，且看不出原因。
+        正常情况下 DApp 从 BridgeOut 日志重建今日用量。浏览器索引暂时不可用时，
+        *_remaining 只能降级为 *_total；这里必须说明当前显示的是上限，避免用户
+        误以为额度仍是满的。
       */}
       {!limits.usage_available && (
         <div className="mb-3 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
@@ -263,4 +266,3 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
     </div>
   );
 };
-

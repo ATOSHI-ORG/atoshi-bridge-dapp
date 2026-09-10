@@ -138,7 +138,7 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           id="tab-bridge-out"
           onClick={() => onDirectionChange('out')}
-          className={`flex-1 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 text-center whitespace-nowrap ${
+          className={`flex min-h-12 flex-1 items-center justify-center px-1 py-2 text-center text-xs font-semibold leading-tight transition-all border-b-2 sm:text-sm ${
             activeDirection === 'out'
               ? 'border-black text-black font-bold'
               : 'border-transparent text-gray-400 hover:text-gray-700'
@@ -151,7 +151,7 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           id="tab-bridge-in"
           onClick={() => onDirectionChange('in')}
-          className={`flex-1 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 text-center whitespace-nowrap ${
+          className={`flex min-h-12 flex-1 items-center justify-center px-1 py-2 text-center text-xs font-semibold leading-tight transition-all border-b-2 sm:text-sm ${
             activeDirection === 'in'
               ? 'border-black text-black font-bold'
               : 'border-transparent text-gray-400 hover:text-gray-700'
@@ -163,5 +163,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-
 

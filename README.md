@@ -6,68 +6,37 @@ Atoshi 链 ⇄ 以太坊 双向跨链桥，以 WebView 形式嵌入 Atoshi 钱�
 
 ---
 
-## ⚠️ 当前状态：桥入可用，桥出不可用
-
-先看这张表再看代码。桥和质押页处境完全不同 —— 质押是全部接通，桥是一半接不通，
-而卡点都不在前端。
+## 当前状态
 
 | | 状态 | 说明 |
 |---|---|---|
 | 桥参数（五层限流的配置） | ✅ | REST `/atoshi/bridgeadapter/v1/params` |
 | migration_pool 流动性 | ✅ | `module_accounts` + `bank/balances` |
 | 五层限流的**上限** | ✅ | 前端照搬链上 `ResolveLimits`，六项逐个对过真链 |
-| 五层限流的**今日已用** | ❌ | 链上有数据，`query.proto` 没暴露查询 |
+| 五层限流的**今日已用** | ✅ | 从 Blockscout `BridgeOut` 日志重建，按 UTC 日重置 |
 | ATOS 余额 | ✅ | `bank/balances` |
-| ERC20 ATOS 余额 | ⚠️ | 以太坊合约调用，**合约未部署** |
-| **桥入** Ethereum→Atoshi | ⚠️ | 是以太坊交易，钱包能签，**合约未部署** |
-| **桥出** Atoshi→Ethereum | ❌ | **硬阻塞**，见下 |
-| 跨链记录 / 状态查询 | ❌ | 无查询接口，需要后端索引服务 |
+| ERC20 ATOS 余额 | ✅ | 以太坊合约调用 |
+| **桥入** Ethereum→Atoshi | ✅ | `AtosCollateral.transferRemote` |
+| **桥出** Atoshi→Ethereum | ✅ | bridgeadapter EVM 预编译 `0x…0808` |
+| 跨链记录 / 状态查询 | ✅ | 记录保存在本机，两条链分别确认到账状态 |
 
-另外链上 `bridge_enabled` 目前是 `false`，`mailbox_id` / `remote_bridge_vault`
-都是 null —— 桥还没通过治理提案启用，所以即便前端全接通了也不会真的转账。
-
-### 桥出为什么还不能用
-
-链上的 `MsgBridgeOut` 是一条 **Cosmos 消息**，而：
-
-- 链上**没有** bridgeadapter 的 EVM 预编译。`atoshid q evm params` 里
-  `active_static_precompiles` 只有官方那几个（`0x…0800` staking、
-  `0x…0801` distribution、bank、gov、ics20、bech32、p256、vesting），
-  所以 `MsgBridgeOut` 变不成一笔以太坊交易。
-- Atoshi 钱包原生层只实现了 `eth_*` / `wallet_*` 方法（见安卓端
-  `WebAppInterface.kt` 的方法白名单），**没有 Cosmos 签名能力**。
-
-对比一下质押页：它能用 MetaMask 这类 EVM 钱包，正是因为链上开了 staking 预编译。
-桥出缺的就是这一环。
-
-两条出路，都在前端之外：
-
-**A. 链侧加一个 bridgeadapter 预编译**（推荐）
-和 staking 预编译同一个套路，暴露 `bridgeOut(address sender, bytes32 recipient,
-uint256 amount)`。做完之后前端改动很小 —— 照 `stakingApiChain` 的写法调一下就行，
-而且所有 EVM 钱包立刻都能用。
-
-**B. 钱包侧支持 Cosmos 签名**
-在 `dapp_provider.js` 加一个自定义方法（比如 `atoshi_signAndBroadcastCosmos`），
-原生层用 Cosmos SDK 签名并广播。范围更大，而且只有 Atoshi 自己的钱包能用，
-MetaMask / OKX 里打开就还是不能桥出。
-
-现在 `submitBridgeOut` 会**抛出说明缺什么的错误**，不返回假的 `tx_hash` ——
-桥出涉及真金白银，假成功会让用户以为钱在路上，然后去等一笔不存在的到账。
+链上原生查询暂未暴露限额的今日已用量，所以 DApp 使用成功交易产生的
+`BridgeOut` EVM 事件计算全局、大额和当前地址用量。交易确认后先即时扣减，
+Blockscout 完成索引后再自动校准。
 
 ---
 
 ## 架构：三个数据源
 
 ```
-        ┌──── Atoshi 读 ────┐
-页面 ──> Cosmos REST (1317)   桥参数、migration_pool、ATOS 余额
+        ┌──── Atoshi 读 ──────────┐
+页面 ──> Cosmos REST + Blockscout   参数、余额、今日桥出用量
 
         ┌──── 以太坊读写 ────┐
 页面 ──> 钱包签名 ──> Sepolia   ERC20 余额、approve、transferRemote（桥入）
 
         ┌──── Atoshi 写 ────┐
-页面 ──✗ 桥出：缺预编译，见上
+页面 ──> 钱包签名 ──> 0x…0808   bridgeOut（桥出）
 ```
 
 ### 桥入是两笔交易，不是一笔
@@ -133,15 +102,14 @@ global_daily_cap 参数    5,000,000,000 ATOS
 crisis_mode = false
 ```
 
-### 「今日已用」拿不到
+### 「今日已用」的来源
 
 链上确实记着这三个数（`GetRateLimitState` / `GetAddressUsage`），但
 `query.proto` 只暴露了 `params` 和 `receipt_state` 两个查询，没导出来。
 
-所以真链模式下 `*_remaining` 只能等于 `*_total`，并且
-`BridgeLimits.usage_available = false`。**UI 必须据此标明「已用量未知」** ——
-不标的话用户会以为额度是满的，按满额填金额，然后在链上被限流拒掉，
-而且看不出为什么。
+当前 DApp 从 Blockscout 的 `BridgeOut` 日志重建 UTC 当日全局、大额和当前地址
+用量，成功交易拿到回执时还会立即在内存中扣减，避免等待索引延迟。浏览器不可用
+时才设置 `BridgeLimits.usage_available = false` 并降级显示每日上限。
 
 修法见下面「已知待办」。
 
@@ -150,8 +118,8 @@ crisis_mode = false
 ## 数据来源：mock 和 chain
 
 ```
-VITE_API_MODE=mock    模拟数据 + 状态机模拟 + 场景切换（默认）
-VITE_API_MODE=chain   连真链
+VITE_API_MODE=mock    模拟数据 + 状态机模拟 + 场景切换
+未设置或其它值         连真链（默认）
 ```
 
 桥的 mock **不是过渡产物，会长期保留**。它模拟了跨链状态机的自动步进和五层限流
@@ -204,9 +172,8 @@ src/
 **但有两处绝对不能用浮点**：
 
 1. `atosToLiao` —— 交易金额要精确到 liao，`atos * 1e18` 会引入误差
-2. **整除判断** —— 桥要求金额是 100 ATOS 的整数倍（peg）。余数会在以太坊侧被
-   静默吞掉：链上锁了全额 ATOS，却只让以太坊释放向下取整的部分，差额凭空消失。
-   链上 `AtosToErc20` 会直接拒绝有余数的金额，前端要在提交前就挡住。
+2. **整除判断** —— 链上按 `liao % atos_per_erc20` 判断，不是要求用户输入
+   100 ATOS 的整数倍。当前参数下真实粒度是 100 liao（`1e-16 ATOS`）。
 
 ---
 
@@ -218,9 +185,7 @@ cp .env.example .env
 npm run dev          # http://localhost:3000
 ```
 
-默认 mock 模式，不需要节点也不需要钱包，页面完整可点。
-
-连真链把 `VITE_API_MODE` 改成 `chain`。
+默认连接真链。需要演示模式时显式设置 `VITE_API_MODE=mock`；该模式不需要节点或钱包。
 
 ```bash
 npm run build        # 产物在 dist/，纯静态
@@ -239,32 +204,17 @@ nginx 部署和质押页一样，`try_files $uri $uri/ /index.html;` 那行必�
 
 按优先级：
 
-1. **链侧加 bridgeadapter 预编译**，桥出才能用。见上文「桥出为什么还不能用」。
-   这是整个桥的主功能，其它都排在它后面。
-
-2. **链侧加一个 Limits 查询**，暴露今日已用量。
+1. **链侧加一个 Limits 查询**，直接暴露今日已用量。
    `x/bridgeadapter/keeper` 里 `GetRateLimitState` / `GetAddressUsage` /
    `Limits(ctx)` 都有了，只差在 `query.proto` 加一个 rpc 和一个
-   `google.api.http` 注解，再把 `Querier` 实现补上。改动很小，但没有它
-   额度面板只能显示上限不能显示剩余。
+   `google.api.http` 注解，再把 `Querier` 实现补上。DApp 目前通过浏览器事件重建
+   剩余额度，但链上原生查询仍更可靠，也能去掉对索引延迟和可用性的依赖。
 
-3. **以太坊侧部署合约**，配 `VITE_ERC20_ATOS_ADDRESS` 和
-   `VITE_COLLATERAL_ADDRESS`，桥入就通了。
-
-4. **治理提案**把 `bridge_enabled` 改成 true，并设置 `mailbox_id` /
-   `remote_bridge_vault` / `ethereum_domain`。
-   注意 `ethereum_domain` 现在是 **1**（创世默认值，即以太坊主网），
-   测试网应该是 **11155111**（Sepolia）—— 不改的话跨链消息发不到正确的链上。
-
-5. **后端索引服务**，出跨链记录和状态查询。跨链记录天然需要两条链的数据
+2. **后端索引服务**，实现跨设备同步的跨链记录。完整记录天然需要两条链的数据
    （Atoshi 侧的 bridge_out 事件 + 以太坊侧 Mailbox 的 Dispatch/Process 事件），
-   前端做不了。`getBridgeHistory` 目前返回空列表。
+   `getBridgeHistory` 目前返回空列表，当前页面只保存本浏览器发起的记录。
    注意别拿 `receipt_state` 去顶 —— 那是 tier 释放通道的回执状态，
    不是资产桥的转账记录，两个不是一回事。
-
-6. **`messageId` 拿不到**。它是 `transferRemote` 的返回值，但 EVM 交易拿不到
-   返回值，要从 Mailbox 的 `Dispatch` 事件里解。等有了合约地址再补，
-   现在返回空字符串而不是编一个假的。
 
 ---
 
