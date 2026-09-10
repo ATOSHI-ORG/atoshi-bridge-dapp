@@ -31,6 +31,14 @@ const ATOSHI_RPC = (
   (import.meta.env.VITE_ATOSHI_EVM_RPC as string) || 'https://rpc-testnet.atoshi.org'
 ).replace(/\/+$/, '');
 
+export const ATOSHI_EXPLORER = (
+  (import.meta.env.VITE_ATOSHI_EXPLORER as string) || 'https://explorer-testnet.atoshi.org'
+).replace(/\/+$/, '');
+
+export const ATOSHI_EXPLORER_API = (
+  (import.meta.env.VITE_ATOSHI_EXPLORER_API as string) || `${ATOSHI_EXPLORER}/api/v2`
+).replace(/\/+$/, '');
+
 export const atoshi = defineChain({
   id: ATOSHI_CHAIN_ID,
   name: 'Atoshi',
@@ -40,7 +48,7 @@ export const atoshi = defineChain({
   blockExplorers: {
     default: {
       name: 'Atoshi Explorer',
-      url: (import.meta.env.VITE_ATOSHI_EXPLORER as string) || 'https://explorer-testnet.atoshi.org',
+      url: ATOSHI_EXPLORER,
     },
   },
   testnet: ATOSHI_CHAIN_ID !== 88888,

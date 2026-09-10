@@ -7,11 +7,11 @@
  * │ 桥参数           │ ✅ REST /atoshi/bridgeadapter/v1/params               │
  * │ migration_pool  │ ✅ module_accounts + bank balances                   │
  * │ 五层限流的「上限」 │ ✅ 前端照搬链上 ResolveLimits 算，逐条对过 Go 源码       │
- * │ 五层限流的「已用」 │ ❌ 链上有数据，但 query.proto 没暴露查询                │
+ * │ 五层限流的「已用」 │ ✅ 从 Blockscout BridgeOut 日志重建 UTC 当日用量          │
  * │ ATOS 余额        │ ✅ bank balances                                     │
  * │ ERC20 余额       │ ✅ 以太坊合约调用                                     │
- * │ 桥入 (ETH→Atoshi)│ ✅ AtosCollateral.transferRemote，两笔交易             │
- * │ 桥出 (Atoshi→ETH)│ ✅ bridgeadapter 预编译 0x…0808，一笔交易              │
+ * │ 桥入 (Ethereum→Atoshi)│ ✅ AtosCollateral.transferRemote，两笔交易        │
+ * │ 桥出 (Atoshi→Ethereum)│ ✅ bridgeadapter 预编译 0x…0808，一笔交易         │
  * │ 交易历史 / 状态   │ ❌ 无查询接口，需要后端索引                            │
  * └─────────────────┴──────────────────────────────────────────────────────┘
  *
@@ -45,9 +45,11 @@ import { bridgeServiceMock } from './bridgeApiMock';
 
 import {
   ATOSHI_CHAIN_ID,
+  ATOSHI_EXPLORER_API,
   ETH_CHAIN_ID,
   atoshi,
   ethChain,
+  toHex,
   toHyperlane32Bytes,
 } from '../wallet/chains';
 import { wagmiConfig } from '../wallet/config';
@@ -77,7 +79,7 @@ import {
   waitForTransactionReceipt,
   writeContract,
 } from 'wagmi/actions';
-import { parseEventLogs } from 'viem';
+import { decodeEventLog, parseEventLogs, type Hex } from 'viem';
 
 /**
  * viem 2.5x 的 ReadContractParameters 把 authorizationList（EIP-7702 用的）
@@ -173,9 +175,7 @@ function resolveLimits(p: BridgeParams): Omit<BridgeLimits, 'resets_at' | 'usage
   const perAddress = bps(global, p.per_address_daily_bps);
 
   return {
-    // 拿不到已用量，所以「最多可转」只能按上限给。UI 依据 usage_available
-    // 标明这一点，不要让用户以为这是精确值。
-    max_transferable: Math.floor(Math.min(global, perAddress) / p.atos_per_erc20) * p.atos_per_erc20,
+    max_transferable: Math.floor(Math.min(global, perAddress)),
     global_remaining: global,
     global_total: global,
     large_remaining: largeBudget,
@@ -186,18 +186,213 @@ function resolveLimits(p: BridgeParams): Omit<BridgeLimits, 'resets_at' | 'usage
   };
 }
 
+interface ExplorerBridgeOutLog {
+  transaction_hash?: string;
+  index?: number;
+  block_timestamp?: string;
+  data?: Hex;
+  topics?: Array<Hex | null>;
+}
+
+interface ExplorerLogPage {
+  items?: ExplorerBridgeOutLog[];
+  next_page_params?: Record<string, string | number | boolean | null> | null;
+}
+
+interface DailyBridgeOut {
+  amount: number;
+  sender: string;
+}
+
+interface DailyUsageCache {
+  dayStart: number;
+  initialized: boolean;
+  entries: Map<string, DailyBridgeOut>;
+}
+
+let dailyUsageCache: DailyUsageCache = {
+  dayStart: 0,
+  initialized: false,
+  entries: new Map(),
+};
+
+function utcDayStart(now = Date.now()): number {
+  const date = new Date(now);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function currentUsageCache(): DailyUsageCache {
+  const dayStart = utcDayStart();
+  if (dailyUsageCache.dayStart !== dayStart) {
+    dailyUsageCache = { dayStart, initialized: false, entries: new Map() };
+  }
+  return dailyUsageCache;
+}
+
+function bridgeOutLogKey(txHash: string | undefined, index = 0): string {
+  return `${(txHash ?? '').toLowerCase()}:${index}`;
+}
+
+function bridgeOutFromLog(log: ExplorerBridgeOutLog): DailyBridgeOut | undefined {
+  if (!log.data || !log.topics) return undefined;
+  const topics = log.topics.filter((topic): topic is Hex => Boolean(topic));
+  if (topics.length < 2) return undefined;
+
+  try {
+    const decoded = decodeEventLog({
+      abi: bridgeAdapterAbi,
+      eventName: 'BridgeOut',
+      data: log.data,
+      topics: topics as [Hex, ...Hex[]],
+      strict: false,
+    });
+    const args = decoded.args as { sender?: string; amount?: bigint };
+    if (!args.sender || args.amount === undefined) return undefined;
+    return {
+      sender: args.sender.toLowerCase(),
+      amount: liaoToAtos(args.amount.toString()),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function explorerLogUrl(cursor?: ExplorerLogPage['next_page_params']): string {
+  const url = new URL(
+    `${ATOSHI_EXPLORER_API}/addresses/${BRIDGE_ADAPTER_PRECOMPILE}/logs`,
+  );
+  if (cursor) {
+    for (const [key, value] of Object.entries(cursor)) {
+      if (value !== null) url.searchParams.set(key, String(value));
+    }
+  }
+  return url.toString();
+}
+
+/** Refresh UTC-today BridgeOut usage from the indexed, successful EVM events. */
+async function refreshDailyUsage(): Promise<DailyUsageCache> {
+  const cache = currentUsageCache();
+  const staged = new Map<string, DailyBridgeOut>();
+  let cursor: ExplorerLogPage['next_page_params'];
+  let complete = false;
+
+  // The first load may span several explorer pages. Later polls stop at the first
+  // event already in the cache, so the 15-second refresh normally costs one request.
+  for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    let page: ExplorerLogPage;
+    try {
+      const response = await fetch(explorerLogUrl(cursor), {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Explorer HTTP ${response.status}`);
+      page = (await response.json()) as ExplorerLogPage;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    for (const log of page.items ?? []) {
+      const timestamp = log.block_timestamp ? Date.parse(log.block_timestamp) : NaN;
+      if (Number.isFinite(timestamp) && timestamp < cache.dayStart) {
+        complete = true;
+        break;
+      }
+
+      const key = bridgeOutLogKey(log.transaction_hash, log.index);
+      if (cache.initialized && cache.entries.has(key)) {
+        complete = true;
+        break;
+      }
+
+      const entry = bridgeOutFromLog(log);
+      if (entry) staged.set(key, entry);
+    }
+
+    if (complete || !page.next_page_params) {
+      complete = true;
+      break;
+    }
+    cursor = page.next_page_params;
+  }
+
+  if (!complete) throw new Error('Explorer pagination did not reach the UTC day boundary');
+  for (const [key, entry] of staged) cache.entries.set(key, entry);
+  cache.initialized = true;
+  return cache;
+}
+
+function rememberBridgeOut(txHash: string, sender: string, amount: number): void {
+  currentUsageCache().entries.set(bridgeOutLogKey(txHash), {
+    sender: sender.toLowerCase(),
+    amount,
+  });
+}
+
+function limitsWithUsage(
+  base: Omit<BridgeLimits, 'resets_at' | 'usage_available'>,
+  params: BridgeParams,
+  address: string,
+  cache: DailyUsageCache,
+): Omit<BridgeLimits, 'resets_at' | 'usage_available'> {
+  const sender = toHex(address).toLowerCase();
+  let globalUsed = 0;
+  let largeUsed = 0;
+  let addressUsed = 0;
+
+  for (const entry of cache.entries.values()) {
+    globalUsed += entry.amount;
+    if (entry.amount > params.small_transfer_threshold) largeUsed += entry.amount;
+    if (entry.sender === sender) addressUsed += entry.amount;
+  }
+
+  const globalRemaining = Math.max(0, base.global_total - globalUsed);
+  const largeRemaining = Math.max(0, base.large_total - largeUsed);
+  const addressRemaining = Math.max(0, base.address_total - addressUsed);
+  const commonRemaining = Math.min(globalRemaining, addressRemaining);
+  const smallCeiling = params.small_transfer_threshold > 0
+    ? Math.min(commonRemaining, params.small_transfer_threshold)
+    : commonRemaining;
+  const largeCeiling = !base.crisis_mode && largeRemaining > params.small_transfer_threshold
+    ? Math.min(commonRemaining, largeRemaining)
+    : 0;
+
+  return {
+    ...base,
+    max_transferable: Math.floor(Math.max(smallCeiling, largeCeiling)),
+    global_remaining: globalRemaining,
+    large_remaining: largeRemaining,
+    address_remaining: addressRemaining,
+  };
+}
+
 /** 今日额度重置时间：链上按 UTC 日切。 */
 function nextResetTimestamp(): number {
   const now = new Date();
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
 }
 
-async function getBridgeLimits(_address?: string): Promise<BridgeLimits> {
+async function getBridgeLimits(address?: string): Promise<BridgeLimits> {
   const params = await getBridgeParams();
+  const base = resolveLimits(params);
+
+  if (address) {
+    try {
+      const usage = await refreshDailyUsage();
+      return {
+        ...limitsWithUsage(base, params, address, usage),
+        resets_at: nextResetTimestamp(),
+        usage_available: true,
+      };
+    } catch (error) {
+      console.warn('Unable to rebuild BridgeOut quota usage from explorer logs', error);
+    }
+  }
+
   return {
-    ...resolveLimits(params),
+    ...base,
     resets_at: nextResetTimestamp(),
-    // 链上没有暴露已用量的查询接口，见文件头的表格
     usage_available: false,
   };
 }
@@ -349,6 +544,10 @@ async function submitBridgeOut(data: {
   if (receipt.status !== 'success') {
     throw new ChainRestError(tr('err.bridge_reverted', { tx: hash }));
   }
+
+  // Blockscout can lag a few seconds behind the receipt. Record the successful
+  // usage immediately; the next explorer refresh de-duplicates it by tx hash.
+  rememberBridgeOut(hash, owner, data.amount_atos);
 
   const now = Date.now();
   return {

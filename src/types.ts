@@ -18,7 +18,7 @@ export interface BridgeParams {
 }
 
 export interface BridgeLimits {
-  max_transferable: number; // 用户当前最多可转金额（五层取最小值，已向下取整至 100 的倍数）
+  max_transferable: number; // 用户当前最多可转金额（综合全局、个人、小额/大额通道后向下取整至整数 ATOS）
   global_remaining: number; // 全网今日剩余额度
   global_total: number; // 全网今日总额度
   large_remaining: number; // 大额可用剩余配额 (80% 共享池剩余)
@@ -32,13 +32,13 @@ export interface BridgeLimits {
    * 「今日已用量」这三个 remaining 字段是不是真实数据。
    *
    * 链上确实记着这三个数（bridgeadapter keeper 的 GetRateLimitState /
-   * GetAddressUsage），但 query.proto 只暴露了 params 和 receipt_state 两个查询，
-   * 没有把它们导出来。所以真链模式下 *_remaining 拿不到，只能等于 *_total。
+   * GetAddressUsage），但 query.proto 没有把它们导出来。DApp 通过 Blockscout 的
+   * BridgeOut 日志重建 UTC 当日用量；浏览器不可用时降级为只展示上限。
    *
    * false 时 UI 必须标明「已用量未知」，不能让用户以为额度是满的 —— 他会按满额
    * 去填金额，然后在链上被限流拒掉，而且看不出为什么。
    *
-   * 修法是给链上加一个 Limits 查询，见 README「已知待办」。
+   * 长期仍应给链上增加 Limits 查询，避免把额度展示依赖在索引服务上。
    */
   usage_available: boolean;
 }

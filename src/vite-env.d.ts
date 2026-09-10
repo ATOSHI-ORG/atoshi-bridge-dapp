@@ -20,6 +20,8 @@ interface ImportMetaEnv {
   /** Atoshi 的 EVM chain id，同时也是它的 Hyperlane domain id。默认 88288 */
   readonly VITE_ATOSHI_CHAIN_ID?: string;
   readonly VITE_ATOSHI_EXPLORER?: string;
+  /** Blockscout API v2；留空时使用 <VITE_ATOSHI_EXPLORER>/api/v2 */
+  readonly VITE_ATOSHI_EXPLORER_API?: string;
 
   /**
    * 以太坊侧的 chain id，同时也是 Hyperlane domain id。

@@ -81,7 +81,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <h3 className="text-base font-bold text-gray-900">
                 {record.direction === 'out' ? t('tx_modal.title_out') : t('tx_modal.title_in')}
               </h3>
-              <p className="text-xs text-gray-500 font-mono">
+              <p
+                className={`text-xs font-mono ${
+                  record.direction === 'out' ? 'font-semibold text-rose-600' : 'text-gray-500'
+                }`}
+              >
                 {record.direction === 'out'
                   ? `${formatNumber(record.amount)} ATOS ➔ ${formatNumber(record.receivedAmount)} ERC20`
                   : `${formatNumber(record.amount)} ERC20 ➔ ${formatNumber(record.receivedAmount)} ATOS`}
@@ -334,4 +338,3 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     </div>
   );
 };
-
