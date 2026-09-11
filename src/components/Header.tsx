@@ -117,9 +117,12 @@ export const Header: React.FC<HeaderProps> = ({
       {/* 品牌标题与网络信息 */}
       <div className="px-5 pt-4 pb-3 flex items-center justify-between">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 bg-black rounded-xl flex items-center justify-center shrink-0 shadow-xs">
-            <div className="w-3.5 h-3.5 border-2 border-white rotate-45"></div>
-          </div>
+          <img
+            src={`${import.meta.env.BASE_URL}atoshi-icon.png`}
+            alt=""
+            aria-hidden="true"
+            className="w-8 h-8 shrink-0 object-contain drop-shadow-sm"
+          />
           <div>
             <h1 className="text-base font-bold tracking-tight text-gray-900 leading-none">
               {t('app.title')}
