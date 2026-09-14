@@ -4,7 +4,7 @@ import {
   ShieldCheck,
   HelpCircle,
 } from 'lucide-react';
-import { BridgeParams, AddressBookItem } from '../types';
+import { BridgeParams, BridgeLimits, AddressBookItem } from '../types';
 import {
   isValidAtoshiAddress,
   formatNumber,
@@ -21,6 +21,11 @@ interface BridgeInViewProps {
    */
   isConnected: boolean;
   params: BridgeParams | null;
+  /**
+   * 链上限流。桥入只受其中一项约束：inbound_cap（全链每日总额度）。
+   * 为 null（还没拉到）或 cap 为 0（链上未配置 = 不限）时退回「自由放行」的说法。
+   */
+  limits: BridgeLimits | null;
   userErc20Balance: number;
   recipientAtoshi: string;
   onRecipientAtoshiChange: (val: string) => void;
@@ -31,6 +36,7 @@ interface BridgeInViewProps {
 
 export const BridgeInView: React.FC<BridgeInViewProps> = ({
   params,
+  limits,
   userErc20Balance,
   recipientAtoshi,
   onRecipientAtoshiChange,
@@ -50,6 +56,13 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
     if (!amountErc20Num || isNaN(amountErc20Num) || amountErc20Num < 0) return 0;
     return amountErc20Num * 100;
   }, [amountErc20Num]);
+
+  // 桥入的额度是按 Atoshi 侧的 ATOS 计的，而输入框填的是以太坊侧的 ERC20，
+  // 100:1。拿 willReceiveAtos 去比，不是 amountErc20Num —— 差 100 倍。
+  const inboundCap = limits?.inbound_cap ?? 0;
+  const hasInboundCap = inboundCap > 0;
+  const inboundRemaining = limits?.inbound_remaining ?? 0;
+  const overInboundCap = hasInboundCap && willReceiveAtos > inboundRemaining;
 
   // 0x 和 atoshi1 两种都收 —— 同一个账户的两种表示
   const isAtoshiAddressValid = isValidAtoshiAddress(recipientAtoshi);
@@ -91,7 +104,11 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
     amountErc20Num > 0 &&
     isBalanceEnough &&
     isAtoshiAddressValid &&
-    isDisclaimerChecked;
+    isDisclaimerChecked &&
+    // 超了日额度就别让他发。ERC20 是在以太坊侧先锁的，Atoshi 侧拒收之后钱不会丢
+    // （relayer 会一直重投，额度重置后放行），但用户会看到一笔卡住的跨链，
+    // 而且要等到第二天 —— 在按钮这里拦住比事后解释便宜得多。
+    !overInboundCap;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,20 +170,53 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
         </div>
       </div>
 
-      {/* 2. 桥入特性与无限流规则卡片 */}
+      {/* 2. 桥入规则卡片。链上配了日额度就显示真实数字，没配才说「自由放行」 */}
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-green-600" />
-            <span>{t('bridge_in.rules_title')}</span>
+            <ShieldCheck className={`w-4 h-4 ${hasInboundCap ? 'text-gray-700' : 'text-green-600'}`} />
+            <span>{hasInboundCap ? t('bridge_in.rules_title_capped') : t('bridge_in.rules_title')}</span>
           </span>
-          <span className="text-[10px] bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded">
-            {t('bridge_in.rules_badge')}
+          <span
+            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+              hasInboundCap ? 'bg-gray-200 text-gray-800' : 'bg-green-100 text-green-800'
+            }`}
+          >
+            {hasInboundCap ? t('bridge_in.rules_badge_capped') : t('bridge_in.rules_badge')}
           </span>
         </div>
         <p className="text-xs text-gray-600 leading-relaxed">
           {t('bridge_in.rules_desc')}
         </p>
+
+        {hasInboundCap && (
+          <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-gray-600">{t('bridge_in.rules_cap_label')}</span>
+              <span className="font-mono text-gray-800">
+                <span className="font-bold text-black">{formatNumber(inboundRemaining)}</span>
+                {' / '}
+                {formatNumber(inboundCap)}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+              <div
+                className="h-full rounded-full bg-gray-800 transition-all"
+                style={{
+                  width: `${Math.min(100, Math.max(0, (inboundRemaining / inboundCap) * 100))}%`,
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              {t('bridge_in.rules_cap_note')}
+            </p>
+            {overInboundCap && (
+              <p className="text-[11px] text-red-600 font-medium leading-relaxed">
+                {t('bridge_in.rules_cap_exceeded')}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* 流动性保障说明 */}
         <div className="bg-white border border-gray-200 rounded-lg p-3 text-xs text-gray-600 space-y-1.5">

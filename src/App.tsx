@@ -381,6 +381,7 @@ export default function App() {
             /* 桥入视图（ETH ➔ Atoshi，无限流，等待流动性补充状态机） */
             <BridgeInView
               params={params}
+              limits={limits}
               userErc20Balance={balanceErc20}
               recipientAtoshi={recipientAtoshi}
               onRecipientAtoshiChange={setRecipientAtoshi}
