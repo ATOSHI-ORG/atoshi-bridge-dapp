@@ -183,189 +183,20 @@ function resolveLimits(p: BridgeParams): Omit<BridgeLimits, 'resets_at' | 'usage
     address_remaining: perAddress,
     address_total: perAddress,
     crisis_mode: crisis,
+    // 入站限额只有链上知道（参数里的两个字段 + 当日已用），本地参数推不出来。
+    // 0 在链上的语义就是「未配置 = 不限」，降级时沿用同一含义。
+    inbound_cap: 0,
+    inbound_remaining: 0,
   };
 }
 
-interface ExplorerBridgeOutLog {
-  transaction_hash?: string;
-  index?: number;
-  block_timestamp?: string;
-  data?: Hex;
-  topics?: Array<Hex | null>;
-}
-
-interface ExplorerLogPage {
-  items?: ExplorerBridgeOutLog[];
-  next_page_params?: Record<string, string | number | boolean | null> | null;
-}
-
-interface DailyBridgeOut {
-  amount: number;
-  sender: string;
-}
-
-interface DailyUsageCache {
-  dayStart: number;
-  initialized: boolean;
-  entries: Map<string, DailyBridgeOut>;
-}
-
-let dailyUsageCache: DailyUsageCache = {
-  dayStart: 0,
-  initialized: false,
-  entries: new Map(),
-};
-
-function utcDayStart(now = Date.now()): number {
-  const date = new Date(now);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-}
-
-function currentUsageCache(): DailyUsageCache {
-  const dayStart = utcDayStart();
-  if (dailyUsageCache.dayStart !== dayStart) {
-    dailyUsageCache = { dayStart, initialized: false, entries: new Map() };
-  }
-  return dailyUsageCache;
-}
-
-function bridgeOutLogKey(txHash: string | undefined, index = 0): string {
-  return `${(txHash ?? '').toLowerCase()}:${index}`;
-}
-
-function bridgeOutFromLog(log: ExplorerBridgeOutLog): DailyBridgeOut | undefined {
-  if (!log.data || !log.topics) return undefined;
-  const topics = log.topics.filter((topic): topic is Hex => Boolean(topic));
-  if (topics.length < 2) return undefined;
-
-  try {
-    const decoded = decodeEventLog({
-      abi: bridgeAdapterAbi,
-      eventName: 'BridgeOut',
-      data: log.data,
-      topics: topics as [Hex, ...Hex[]],
-      strict: false,
-    });
-    const args = decoded.args as { sender?: string; amount?: bigint };
-    if (!args.sender || args.amount === undefined) return undefined;
-    return {
-      sender: args.sender.toLowerCase(),
-      amount: liaoToAtos(args.amount.toString()),
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function explorerLogUrl(cursor?: ExplorerLogPage['next_page_params']): string {
-  const url = new URL(
-    `${ATOSHI_EXPLORER_API}/addresses/${BRIDGE_ADAPTER_PRECOMPILE}/logs`,
-  );
-  if (cursor) {
-    for (const [key, value] of Object.entries(cursor)) {
-      if (value !== null) url.searchParams.set(key, String(value));
-    }
-  }
-  return url.toString();
-}
-
-/** Refresh UTC-today BridgeOut usage from the indexed, successful EVM events. */
-async function refreshDailyUsage(): Promise<DailyUsageCache> {
-  const cache = currentUsageCache();
-  const staged = new Map<string, DailyBridgeOut>();
-  let cursor: ExplorerLogPage['next_page_params'];
-  let complete = false;
-
-  // The first load may span several explorer pages. Later polls stop at the first
-  // event already in the cache, so the 15-second refresh normally costs one request.
-  for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-    let page: ExplorerLogPage;
-    try {
-      const response = await fetch(explorerLogUrl(cursor), {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error(`Explorer HTTP ${response.status}`);
-      page = (await response.json()) as ExplorerLogPage;
-    } finally {
-      clearTimeout(timer);
-    }
-
-    for (const log of page.items ?? []) {
-      const timestamp = log.block_timestamp ? Date.parse(log.block_timestamp) : NaN;
-      if (Number.isFinite(timestamp) && timestamp < cache.dayStart) {
-        complete = true;
-        break;
-      }
-
-      const key = bridgeOutLogKey(log.transaction_hash, log.index);
-      if (cache.initialized && cache.entries.has(key)) {
-        complete = true;
-        break;
-      }
-
-      const entry = bridgeOutFromLog(log);
-      if (entry) staged.set(key, entry);
-    }
-
-    if (complete || !page.next_page_params) {
-      complete = true;
-      break;
-    }
-    cursor = page.next_page_params;
-  }
-
-  if (!complete) throw new Error('Explorer pagination did not reach the UTC day boundary');
-  for (const [key, entry] of staged) cache.entries.set(key, entry);
-  cache.initialized = true;
-  return cache;
-}
-
-function rememberBridgeOut(txHash: string, sender: string, amount: number): void {
-  currentUsageCache().entries.set(bridgeOutLogKey(txHash), {
-    sender: sender.toLowerCase(),
-    amount,
-  });
-}
-
-function limitsWithUsage(
-  base: Omit<BridgeLimits, 'resets_at' | 'usage_available'>,
-  params: BridgeParams,
-  address: string,
-  cache: DailyUsageCache,
-): Omit<BridgeLimits, 'resets_at' | 'usage_available'> {
-  const sender = toHex(address).toLowerCase();
-  let globalUsed = 0;
-  let largeUsed = 0;
-  let addressUsed = 0;
-
-  for (const entry of cache.entries.values()) {
-    globalUsed += entry.amount;
-    if (entry.amount > params.small_transfer_threshold) largeUsed += entry.amount;
-    if (entry.sender === sender) addressUsed += entry.amount;
-  }
-
-  const globalRemaining = Math.max(0, base.global_total - globalUsed);
-  const largeRemaining = Math.max(0, base.large_total - largeUsed);
-  const addressRemaining = Math.max(0, base.address_total - addressUsed);
-  const commonRemaining = Math.min(globalRemaining, addressRemaining);
-  const smallCeiling = params.small_transfer_threshold > 0
-    ? Math.min(commonRemaining, params.small_transfer_threshold)
-    : commonRemaining;
-  const largeCeiling = !base.crisis_mode && largeRemaining > params.small_transfer_threshold
-    ? Math.min(commonRemaining, largeRemaining)
-    : 0;
-
-  return {
-    ...base,
-    max_transferable: Math.floor(Math.max(smallCeiling, largeCeiling)),
-    global_remaining: globalRemaining,
-    large_remaining: largeRemaining,
-    address_remaining: addressRemaining,
-  };
-}
+// 这里原来有约 180 行代码，从 Blockscout 的 BridgeOut 日志重建 UTC 当日用量：
+// 分页拉取、按 txHash+index 去重、跨日重置缓存、再按发送方汇总出每个地址的用量。
+//
+// 全部删掉了。链上现在直接给：/atoshi/bridgeadapter/v1/limits 和
+// /address_usage/{addr} 返回的就是 keeper 里的计数器本身。重建出来的那份始终
+// 只是近似 —— 只看得到出站、依赖浏览器可用、并且漏掉任何不经过 BridgeOut 事件
+// 的路径。
 
 /** 今日额度重置时间：链上按 UTC 日切。 */
 function nextResetTimestamp(): number {
@@ -373,28 +204,87 @@ function nextResetTimestamp(): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
 }
 
+/** /atoshi/bridgeadapter/v1/limits — 数值都是 liao 字符串。 */
+interface ChainLimitsResponse {
+  outbound_global_cap?: string;
+  outbound_global_remaining?: string;
+  outbound_large_budget?: string;
+  outbound_large_remaining?: string;
+  per_address_cap?: string;
+  small_transfer_threshold?: string;
+  min_transfer_out?: string;
+  crisis_mode?: boolean;
+  inbound_cap?: string;
+  inbound_remaining?: string;
+  resets_at_unix?: string | number;
+  migration_pool_balance?: string;
+}
+
+/** /atoshi/bridgeadapter/v1/address_usage/{address} */
+interface ChainAddressUsageResponse {
+  used?: string;
+  remaining?: string;
+}
+
 async function getBridgeLimits(address?: string): Promise<BridgeLimits> {
   const params = await getBridgeParams();
-  const base = resolveLimits(params);
+  const fallback = resolveLimits(params);
 
-  if (address) {
-    try {
-      const usage = await refreshDailyUsage();
-      return {
-        ...limitsWithUsage(base, params, address, usage),
-        resets_at: nextResetTimestamp(),
-        usage_available: true,
-      };
-    } catch (error) {
-      console.warn('Unable to rebuild BridgeOut quota usage from explorer logs', error);
+  try {
+    const res = await restGet<ChainLimitsResponse>('/atoshi/bridgeadapter/v1/limits');
+
+    // Per-address usage is a second call and only meaningful with an address.
+    // A failure here must not lose the global figures we already have, so it
+    // degrades to the cap rather than propagating.
+    let addressRemaining = liaoToAtos(res.per_address_cap);
+    if (address) {
+      try {
+        const u = await restGet<ChainAddressUsageResponse>(
+          `/atoshi/bridgeadapter/v1/address_usage/${address}`,
+        );
+        addressRemaining = liaoToAtos(u.remaining);
+      } catch (error) {
+        console.warn('per-address bridge usage unavailable', error);
+      }
     }
-  }
 
-  return {
-    ...base,
-    resets_at: nextResetTimestamp(),
-    usage_available: false,
-  };
+    const globalRemaining = liaoToAtos(res.outbound_global_remaining);
+    const largeRemaining = liaoToAtos(res.outbound_large_remaining);
+    const addressCap = liaoToAtos(res.per_address_cap);
+
+    return {
+      // What the user may actually sign right now: every layer the chain will
+      // check, not just the global one. Quoting a bigger number would send them
+      // into a transaction the chain rejects for a reason the UI never showed.
+      max_transferable:
+        Math.floor(
+          Math.min(globalRemaining, addressRemaining, largeRemaining || globalRemaining) /
+            params.atos_per_erc20,
+        ) * params.atos_per_erc20,
+      global_remaining: globalRemaining,
+      global_total: liaoToAtos(res.outbound_global_cap),
+      large_remaining: largeRemaining,
+      large_total: liaoToAtos(res.outbound_large_budget),
+      address_remaining: addressRemaining,
+      address_total: addressCap,
+      crisis_mode: Boolean(res.crisis_mode),
+      resets_at: Number(res.resets_at_unix ?? 0) * 1000 || nextResetTimestamp(),
+      inbound_cap: liaoToAtos(res.inbound_cap),
+      inbound_remaining: liaoToAtos(res.inbound_remaining),
+      usage_available: true,
+    };
+  } catch (error) {
+    // The chain's REST is down. Show the caps and say the usage is unknown --
+    // never imply a full allowance, or the user fills the max and gets rejected.
+    console.warn('chain limits query failed, falling back to caps only', error);
+    return {
+      ...fallback,
+      resets_at: nextResetTimestamp(),
+      inbound_cap: 0,
+      inbound_remaining: 0,
+      usage_available: false,
+    };
+  }
 }
 
 /* ─────────────────────────── 余额 ─────────────────────────── */
@@ -545,9 +435,10 @@ async function submitBridgeOut(data: {
     throw new ChainRestError(tr('err.bridge_reverted', { tx: hash }));
   }
 
-  // Blockscout can lag a few seconds behind the receipt. Record the successful
-  // usage immediately; the next explorer refresh de-duplicates it by tx hash.
-  rememberBridgeOut(hash, owner, data.amount_atos);
+  // No local usage bookkeeping here any more. The chain's own counter is
+  // updated in the same transaction that moved the coins, so the next
+  // /limits query already reflects this transfer -- there is nothing to
+  // pre-record and nothing that could disagree with the chain.
 
   const now = Date.now();
   return {

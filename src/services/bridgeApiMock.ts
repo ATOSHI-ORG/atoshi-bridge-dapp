@@ -416,7 +416,9 @@ class BridgeService {
       address_remaining: addressRemaining,
       address_total: addressTotal,
       crisis_mode: isCrisis,
-      resets_at: this.getNextResetTimestamp(),
+      inbound_cap: 3_000_000_000,
+    inbound_remaining: 3_000_000_000,
+    resets_at: this.getNextResetTimestamp(),
       // mock 的已用量是编的，但它是"真实存在的数据"这一点为真 ——
       // 真链模式下这个字段是 false，UI 据此提示"已用量未知"
       usage_available: true,
