@@ -45,7 +45,6 @@ import { bridgeServiceMock } from './bridgeApiMock';
 
 import {
   ATOSHI_CHAIN_ID,
-  ATOSHI_EXPLORER_API,
   ETH_CHAIN_ID,
   atoshi,
   ethChain,
