@@ -244,6 +244,33 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
         </div>
       </div>
 
+      {/*
+        桥入额度。
+
+        只在链上真的配置了才显示：cap 为 0 在链上的含义是「未配置 = 不限」，
+        照着渲染会变成「剩余 0」，看起来像桥入被封了 —— 和事实正好相反。
+      */}
+      {limits.usage_available && limits.inbound_cap > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          <div className="flex items-center justify-between text-[11px] mb-1.5">
+            <span className="text-gray-600">{t('quota.inbound_label')}</span>
+            <span className="font-mono text-gray-800">
+              <span className="font-bold text-black">{formatNumber(limits.inbound_remaining)}</span>
+              {' / '}
+              {formatNumber(limits.inbound_cap)}
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full bg-gray-800 transition-all"
+              style={{
+                width: `${Math.min(100, Math.max(0, (limits.inbound_remaining / limits.inbound_cap) * 100))}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 底部硬性规则说明与细则按钮 */}
       <div className="pt-3 border-t border-gray-200 flex items-center justify-between text-[11px] text-gray-600">
         <div className="flex items-center gap-3">

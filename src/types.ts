@@ -28,17 +28,19 @@ export interface BridgeLimits {
   crisis_mode: boolean; // 是否处于危机模式（流动性 < 10%）
   resets_at: number; // 今日额度重置时间戳 (ms)
 
+  inbound_cap: number; // 桥入每日上限（0 = 未配置，不限）
+  inbound_remaining: number; // 桥入今日剩余
+
   /**
-   * 「今日已用量」这三个 remaining 字段是不是真实数据。
+   * 「今日已用量」这几个 remaining 字段是不是真实数据。
    *
-   * 链上确实记着这三个数（bridgeadapter keeper 的 GetRateLimitState /
-   * GetAddressUsage），但 query.proto 没有把它们导出来。DApp 通过 Blockscout 的
-   * BridgeOut 日志重建 UTC 当日用量；浏览器不可用时降级为只展示上限。
+   * 现在链上直接给：/atoshi/bridgeadapter/v1/limits 返回的是 keeper 里的真实
+   * 计数器。以前 query.proto 没导出这些字段，DApp 只能从 Blockscout 的 BridgeOut
+   * 日志重建当日用量 —— 要翻页、要缓存、浏览器挂了就降级，而且只看得到出站。
    *
-   * false 时 UI 必须标明「已用量未知」，不能让用户以为额度是满的 —— 他会按满额
-   * 去填金额，然后在链上被限流拒掉，而且看不出为什么。
-   *
-   * 长期仍应给链上增加 Limits 查询，避免把额度展示依赖在索引服务上。
+   * 保留这个标志是因为链的 REST 仍可能不通。false 时 UI 必须标明「已用量未知」，
+   * 不能让用户以为额度是满的 —— 他会按满额填金额，然后在链上被限流拒掉，还看不出
+   * 为什么。
    */
   usage_available: boolean;
 }
