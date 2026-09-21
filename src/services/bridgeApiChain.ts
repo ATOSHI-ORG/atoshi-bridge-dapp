@@ -186,6 +186,9 @@ function resolveLimits(p: BridgeParams): Omit<BridgeLimits, 'resets_at' | 'usage
     // 0 在链上的语义就是「未配置 = 不限」，降级时沿用同一含义。
     inbound_cap: 0,
     inbound_remaining: 0,
+    // 本地参数推不出这个：它是链上的一个布尔。降级时当成「限流开着」，因为
+    // 反过来会在链不可达时放行一个链上会拒绝的金额。
+    rate_limits_disabled: false,
   };
 }
 
@@ -217,6 +220,9 @@ interface ChainLimitsResponse {
   inbound_remaining?: string;
   resets_at_unix?: string | number;
   migration_pool_balance?: string;
+  // 注意：为 false 时 proto3 的 omitempty 会把这个字段整个省略掉，所以
+  // 「字段不存在」等于「限流生效中」，不能当成「拿不到数据」。
+  rate_limits_disabled?: boolean;
 }
 
 /** /atoshi/bridgeadapter/v1/address_usage/{address} */
@@ -270,6 +276,7 @@ async function getBridgeLimits(address?: string): Promise<BridgeLimits> {
       resets_at: Number(res.resets_at_unix ?? 0) * 1000 || nextResetTimestamp(),
       inbound_cap: liaoToAtos(res.inbound_cap),
       inbound_remaining: liaoToAtos(res.inbound_remaining),
+      rate_limits_disabled: Boolean(res.rate_limits_disabled),
       usage_available: true,
     };
   } catch (error) {
@@ -281,6 +288,9 @@ async function getBridgeLimits(address?: string): Promise<BridgeLimits> {
       resets_at: nextResetTimestamp(),
       inbound_cap: 0,
       inbound_remaining: 0,
+      // 查不到就当限流开着。反过来（默认当成关闭）会在链不可达时放行一个
+      // 链上会拒绝的金额，而那是用户最没法理解的失败。
+      rate_limits_disabled: false,
       usage_available: false,
     };
   }

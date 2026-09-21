@@ -59,7 +59,9 @@ export const BridgeInView: React.FC<BridgeInViewProps> = ({
 
   // 桥入的额度是按 Atoshi 侧的 ATOS 计的，而输入框填的是以太坊侧的 ERC20，
   // 100:1。拿 willReceiveAtos 去比，不是 amountErc20Num —— 差 100 倍。
-  const inboundCap = limits?.inbound_cap ?? 0;
+  // 限流被治理关掉时 inbound_cap 仍然返回真实数字（参数还在链上），所以要先看
+  // 开关再看数值 —— 否则会画一条没人在执行的额度条。
+  const inboundCap = limits?.rate_limits_disabled ? 0 : (limits?.inbound_cap ?? 0);
   const hasInboundCap = inboundCap > 0;
   const inboundRemaining = limits?.inbound_remaining ?? 0;
   const overInboundCap = hasInboundCap && willReceiveAtos > inboundRemaining;

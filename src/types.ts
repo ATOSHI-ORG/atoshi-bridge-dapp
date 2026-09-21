@@ -32,6 +32,15 @@ export interface BridgeLimits {
   inbound_remaining: number; // 桥入今日剩余
 
   /**
+   * 链上把限流整个关掉了（bridgeadapter 的 rate_limits_disabled）。
+   *
+   * 关掉之后上面那些 cap / remaining 仍然会返回真实数字 —— 它们是「如果开着
+   * 会是多少」，参数原样留在链上没被删。所以**画额度条之前必须先看这个**，
+   * 否则会告诉用户「今日剩余 29.99 亿」，而根本没有人在执行这个限制。
+   */
+  rate_limits_disabled: boolean;
+
+  /**
    * 「今日已用量」这几个 remaining 字段是不是真实数据。
    *
    * 现在链上直接给：/atoshi/bridgeadapter/v1/limits 返回的是 keeper 里的真实
