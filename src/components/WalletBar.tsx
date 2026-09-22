@@ -13,7 +13,7 @@
  */
 
 import { useI18n } from '../i18n';
-import { AlertTriangle, Wallet } from 'lucide-react';
+import { AlertTriangle, LogOut, Wallet } from 'lucide-react';
 
 import type { BridgeSide } from '../wallet/useWallet';
 
@@ -26,8 +26,11 @@ interface WalletBarProps {
   hasProvider: boolean;
   isOnRightChain: boolean;
   loadError?: string | null;
+  /** 0x address of the connected account, for the disconnect row */
+  address?: string;
   onConnect: () => void;
   onSwitch: () => void;
+  onDisconnect: () => void;
 }
 
 export function WalletBar({
@@ -38,8 +41,10 @@ export function WalletBar({
   hasProvider,
   isOnRightChain,
   loadError,
+  address,
   onConnect,
   onSwitch,
+  onDisconnect,
 }: WalletBarProps) {
   const { t } = useI18n();
   if (loadError) {
@@ -55,15 +60,28 @@ export function WalletBar({
   }
 
   if (!isConnected) {
+    /*
+      The button is rendered whether or not a provider was detected.
+
+      It used to be hidden without one, on the reasoning that a dead button is
+      worse than none. In practice the opposite happened: in a private window,
+      where extensions are disabled unless explicitly allowed, the page offered
+      no control at all and one line of text the user could not act on. Nothing
+      said the wallet was merely switched off rather than missing.
+
+      Detection is also not something to hide a control behind. Extensions
+      inject window.ethereum asynchronously, so "not detected" can simply mean
+      "not yet" -- see useHasProvider.
+
+      So the button stays, and the hint below it says what to do when there is
+      no provider.
+    */
     return (
-      <div className="mx-4 mt-3 flex items-center gap-3 rounded-xl border border-[#ECEFF3] bg-white px-3 py-2.5">
-        <p className="flex-1 text-[12px] leading-snug text-gray-500">
-          {/* 普通浏览器里根本没有钱包可连，这时提示「请连接钱包」是误导 —— 点了不会有反应 */}
-          {hasProvider
-            ? t('wallet.connect_hint')
-            : t('wallet.no_provider')}
-        </p>
-        {hasProvider && (
+      <div className="mx-4 mt-3 rounded-xl border border-[#ECEFF3] bg-white px-3 py-2.5">
+        <div className="flex items-center gap-3">
+          <p className="flex-1 text-[12px] leading-snug text-gray-500">
+            {hasProvider ? t('wallet.connect_hint') : t('wallet.no_provider')}
+          </p>
           <button
             onClick={onConnect}
             disabled={isConnecting}
@@ -72,6 +90,11 @@ export function WalletBar({
             <Wallet className="h-3.5 w-3.5" />
             {isConnecting ? t('wallet.connecting') : t('wallet.connect')}
           </button>
+        </div>
+        {!hasProvider && (
+          <p className="mt-1.5 text-[11px] leading-relaxed text-gray-400">
+            {t('wallet.no_provider_help')}
+          </p>
         )}
       </div>
     );
@@ -100,5 +123,29 @@ export function WalletBar({
     );
   }
 
-  return null;
+  /*
+    Connected and on the right chain. This used to render nothing, which left no
+    way to disconnect -- a real problem on a shared or public machine, and the
+    staking app has had the control all along.
+
+    Deliberately quiet: one line, the address, and the control. The bar's other
+    states are warnings and should stay visually louder than this one.
+  */
+  return (
+    <div className="mx-4 mt-3 flex items-center gap-3 rounded-xl border border-[#ECEFF3] bg-white px-3 py-2">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+      <span className="flex-1 truncate font-mono text-[12px] text-gray-600">
+        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : t('wallet.connected')}
+      </span>
+      <button
+        type="button"
+        id="btn-wallet-disconnect"
+        onClick={onDisconnect}
+        className="flex shrink-0 items-center gap-1 rounded-lg border border-[#ECEFF3] px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800"
+      >
+        <LogOut className="h-3 w-3" />
+        {t('wallet.disconnect')}
+      </button>
+    </div>
+  );
 }

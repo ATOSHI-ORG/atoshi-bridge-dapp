@@ -334,8 +334,10 @@ export default function App() {
           hasProvider={wallet.hasProvider}
           isOnRightChain={wallet.isOnChainFor(activeDirection === 'out' ? 'atoshi' : 'ethereum')}
           loadError={loadError}
+          address={wallet.address}
           onConnect={wallet.connect}
           onSwitch={() => wallet.switchTo(activeDirection === 'out' ? 'atoshi' : 'ethereum')}
+          onDisconnect={wallet.disconnect}
         />
 
         {/* 主体内容 */}

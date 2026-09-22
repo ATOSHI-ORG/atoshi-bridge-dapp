@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, ShieldCheck, ChevronRight, HelpCircle, Flame, Info } from 'lucide-react';
+import { ShieldAlert, ChevronRight, HelpCircle, Flame, Info } from 'lucide-react';
 import { BridgeLimits, BridgeParams } from '../types';
 import { formatNumber } from '../utils/bridgeValidation';
 import { useI18n } from '../i18n';
@@ -71,38 +71,17 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
   /*
     链上把限流整个关掉了（bridgeadapter 的 rate_limits_disabled）。
 
-    这时 limits 里的 cap / remaining 仍然是真实返回的数字 —— 参数原样留在链上，
-    它们表示「如果开着会是多少」。照常画额度条会告诉用户「今日剩余 29.99 亿」，
-    而根本没有人在执行这个限制：一个看起来精确、实际不存在的约束，比不显示更糟。
+    整块不渲染，连说明都不给。
 
-    所以这里整块换掉，只说明当前不限额。参数还在链上，治理一条提案就能开回来，
-    届时这个面板自动恢复。
+    面板里每个数字都是在回答「你还剩多少额度」，而现在这个问题不成立 ——
+    limits 里的 cap / remaining 仍然返回真实数字（参数原样留在链上），它们
+    表示「如果开着会是多少」。画出来会让用户照着一个没人执行的限制去规划。
+
+    也不留一句「当前不限额」：没有限制的时候，讲限制这件事本身就是噪音，
+    而且下一步用户会问「那什么时候会有限制」，没有人能答。治理开回来之后
+    这个面板自动恢复。
   */
-  if (limits.rate_limits_disabled) {
-    return (
-      <div
-        id="quota-panel"
-        className="w-full bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-2"
-      >
-        <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
-          <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          <span>{t('quota.limits_off_title')}</span>
-          <button
-            type="button"
-            id="btn-quota-rules-info"
-            onClick={onOpenRulesModal}
-            className="text-gray-400 hover:text-black transition-colors inline-flex items-center"
-            title={t('quota.rules_btn')}
-          >
-            <HelpCircle className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <p className="text-[11px] leading-relaxed text-gray-600">
-          {t('quota.limits_off_desc')}
-        </p>
-      </div>
-    );
-  }
+  if (limits.rate_limits_disabled) return null;
 
   return (
     <div

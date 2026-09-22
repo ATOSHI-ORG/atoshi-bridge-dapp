@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useAccount, useConnect, useSwitchChain } from 'wagmi';
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 
 import { ATOSHI_CHAIN_ID, ETH_CHAIN_ID, hexToBech32 } from './chains';
 
@@ -17,6 +17,58 @@ import { ATOSHI_CHAIN_ID, ETH_CHAIN_ID, hexToBech32 } from './chains';
  */
 function hasInjectedProvider(): boolean {
   return typeof window !== 'undefined' && Boolean((window as any).ethereum);
+}
+
+/**
+ * Whether an injected provider exists, as REACTIVE state.
+ *
+ * Extensions inject window.ethereum asynchronously, and often after this app has
+ * already mounted. Reading it once during render is a race: lose it and the
+ * connect button never appears, on a machine where the wallet is installed and
+ * working. Nothing re-renders to correct it either, because a plain function
+ * call is not a subscription. This is what EIP-6963 exists to solve.
+ *
+ * Three signals, because no single one covers every wallet:
+ *   - eip6963:announceProvider, which modern wallets emit on request
+ *   - ethereum#initialized, MetaMask's older signal
+ *   - a short poll, for wallets that emit neither and simply assign the global
+ *
+ * The poll stops as soon as a provider appears, and gives up after ~3s: past
+ * that, no wallet is coming.
+ */
+function useHasProvider(): boolean {
+  const [present, setPresent] = useState(hasInjectedProvider);
+
+  useEffect(() => {
+    if (present || typeof window === 'undefined') return;
+
+    let stop = false;
+    const found = () => {
+      if (stop) return;
+      if (hasInjectedProvider()) {
+        stop = true;
+        setPresent(true);
+      }
+    };
+
+    window.addEventListener('eip6963:announceProvider', found);
+    window.addEventListener('ethereum#initialized', found);
+    // Asking is half of EIP-6963: wallets announce in response to this.
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+    const timer = window.setInterval(found, 200);
+    const giveUp = window.setTimeout(() => window.clearInterval(timer), 3000);
+
+    return () => {
+      stop = true;
+      window.removeEventListener('eip6963:announceProvider', found);
+      window.removeEventListener('ethereum#initialized', found);
+      window.clearInterval(timer);
+      window.clearTimeout(giveUp);
+    };
+  }, [present]);
+
+  return present;
 }
 
 /** 是不是 Atoshi 钱包自己的 WebView。只在这里面才自动连接。 */
@@ -31,7 +83,9 @@ export function useWallet() {
   const { address, isConnected, chainId } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
+  const { disconnect } = useDisconnect();
   const [autoTried, setAutoTried] = useState(false);
+  const hasProvider = useHasProvider();
 
   const injectedConnector = connectors.find((c) => c.id === 'injected' || c.type === 'injected');
 
@@ -66,7 +120,7 @@ export function useWallet() {
     chainId,
     atoshiChainId: ATOSHI_CHAIN_ID,
     ethChainId: ETH_CHAIN_ID,
-    hasProvider: hasInjectedProvider(),
+    hasProvider,
 
     /** 当前这个方向需要的链，钱包连对了吗 */
     isOnChainFor: (side: BridgeSide) => isConnected && chainId === chainIdFor(side),
@@ -75,5 +129,16 @@ export function useWallet() {
     connect: () => {
       if (injectedConnector) connect({ connector: injectedConnector });
     },
+
+    /**
+     * Disconnect. The injected connector is created with shimDisconnect, so
+     * wagmi remembers the choice and does not silently reconnect on reload --
+     * without that this button would look broken after a refresh.
+     *
+     * It does not revoke the site in the wallet itself; no extension API allows
+     * that. A user who wants the authorisation gone has to remove the site in
+     * their wallet, which is out of a page's reach.
+     */
+    disconnect: () => disconnect(),
   };
 }
