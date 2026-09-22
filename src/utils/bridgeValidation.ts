@@ -209,3 +209,19 @@ export function shortenAddress(addr: string, startChars: number = 6, endChars: n
   if (addr.length <= startChars + endChars) return addr;
   return `${addr.slice(0, startChars)}...${addr.slice(-endChars)}`;
 }
+
+/**
+ * Whether the quota panel has anything to say.
+ *
+ * Lives here rather than inside QuotaPanel because the panel occupies a fixed
+ * 340px column in BridgeOutView's desktop grid. A component that hides itself
+ * leaves that column standing and the form sitting off-centre next to an empty
+ * strip -- the layout has to collapse in the same breath, and only the parent
+ * that owns the grid can do that.
+ *
+ * Null limits means they have not loaded yet: show the panel, which renders its
+ * own loading state, rather than flashing a one-column layout and then jumping.
+ */
+export function shouldShowQuota(limits: { rate_limits_disabled: boolean } | null): boolean {
+  return limits === null || !limits.rate_limits_disabled;
+}

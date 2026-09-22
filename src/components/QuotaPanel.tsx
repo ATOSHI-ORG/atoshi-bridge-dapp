@@ -68,21 +68,6 @@ export const QuotaPanel: React.FC<QuotaPanelProps> = ({
     ? Math.min(100, Math.max(0, (limits.address_remaining / limits.address_total) * 100))
     : 0;
 
-  /*
-    链上把限流整个关掉了（bridgeadapter 的 rate_limits_disabled）。
-
-    整块不渲染，连说明都不给。
-
-    面板里每个数字都是在回答「你还剩多少额度」，而现在这个问题不成立 ——
-    limits 里的 cap / remaining 仍然返回真实数字（参数原样留在链上），它们
-    表示「如果开着会是多少」。画出来会让用户照着一个没人执行的限制去规划。
-
-    也不留一句「当前不限额」：没有限制的时候，讲限制这件事本身就是噪音，
-    而且下一步用户会问「那什么时候会有限制」，没有人能答。治理开回来之后
-    这个面板自动恢复。
-  */
-  if (limits.rate_limits_disabled) return null;
-
   return (
     <div
       id="quota-panel"

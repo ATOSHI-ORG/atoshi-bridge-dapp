@@ -13,6 +13,7 @@ import {
 import { BridgeLimits, BridgeParams, AddressBookItem } from '../types';
 import { QuotaPanel } from './QuotaPanel';
 import {
+  shouldShowQuota,
   validateBridgeOutAmount,
   isValidEthereumAddress,
   formatNumber,
@@ -131,10 +132,23 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
   // 桌面两栏：左边是表单（金额 → 方向 → 收款地址 → 提交），右边常驻额度面板。
   // 用 col-start 显式定位而不是改 DOM 顺序 —— 手机上顺序必须保持
   // 「输入金额 → 紧跟着看额度」，那是这个页面的核心交互。
+  //
+  // 治理关掉限流之后没有额度可显示，右栏必须一起收掉：340px 是写在 grid 模板
+  // 里的固定列，只把面板藏起来会留下一条空白，表单也就不居中了。
+  //
+  // 收掉之后限宽居中而不是铺满：两栏时左栏实际约 636px（1080 容器 − 80 内边距
+  // − 340 右栏 − 24 间距），让表单突然变成 1000px 宽会把输入框拉得很难看。
+  // max-w-2xl（672px）最接近原来的宽度。
+  const showQuota = shouldShowQuota(limits);
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6 lg:space-y-0"
+      className={
+        showQuota
+          ? 'space-y-4 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6 lg:space-y-0'
+          : 'space-y-4 lg:mx-auto lg:max-w-2xl'
+      }
     >
       {/* 1. 金额输入与余额卡片 */}
       <div className="mt-2 lg:col-start-1">
@@ -228,15 +242,17 @@ export const BridgeOutView: React.FC<BridgeOutViewProps> = ({
       </div>
 
       {/* 2. 额度面板。手机上紧跟金额输入；桌面上移到右栏并吸顶 */}
-      <div className="lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6">
-      <QuotaPanel
-        limits={limits}
-        params={params}
-        inputAmount={amountNum}
-        highlightTier={validationResult.highlightTier}
-        onOpenRulesModal={onOpenRulesModal}
-      />
-      </div>
+      {showQuota && (
+        <div className="lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6">
+          <QuotaPanel
+            limits={limits}
+            params={params}
+            inputAmount={amountNum}
+            highlightTier={validationResult.highlightTier}
+            onOpenRulesModal={onOpenRulesModal}
+          />
+        </div>
+      )}
 
       {/* 3. 中间方向转换示意分割线 */}
       <div className="flex items-center justify-center py-1 lg:col-start-1">
