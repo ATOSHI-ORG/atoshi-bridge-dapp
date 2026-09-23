@@ -358,6 +358,8 @@ export const translations = {
     'error.load_chain_data': 'Could not read chain data',
     'error.bridge_out_failed': 'Bridge out failed',
     'error.bridge_in_failed': 'Bridge in failed',
+    'err.user_rejected': 'Transaction rejected by user.',
+    'err.unknown_transaction_error': 'The transaction could not be submitted.',
     'err.rest_not_configured': 'VITE_REST_URL is not set. The bridge reads its chain parameters from the node Cosmos REST endpoint ([api] in app.toml, 1317 by default).',
     'err.http_failed': 'Request failed (HTTP {status})',
     'err.timeout': 'Request timed out after {ms}ms',
@@ -730,6 +732,8 @@ export const translations = {
     'error.load_chain_data': '读取链上数据失败',
     'error.bridge_out_failed': '跨链转出失败',
     'error.bridge_in_failed': '跨链转入失败',
+    'err.user_rejected': '用户已拒绝交易。',
+    'err.unknown_transaction_error': '交易未能提交。',
     'err.rest_not_configured': '未配置 VITE_REST_URL。桥的链上参数需要节点的 Cosmos REST 端点（app.toml 的 [api]，默认 1317）。',
     'err.http_failed': '请求失败 (HTTP {status})',
     'err.timeout': '请求超时 ({ms}ms)',
@@ -810,6 +814,11 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // ignore
     }
   };
+
+  useEffect(() => {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.title = translations[lang]['app.title'];
+  }, [lang]);
 
   const t = (key: string, params?: Record<string, string | number>): string => {
     const currentDict = translations[lang] || translations.en;

@@ -29,6 +29,7 @@ import { ShieldX } from 'lucide-react';
 import { useI18n } from './i18n';
 import { loadRecords, mergeRecords, patchRecord, saveRecord } from './services/bridgeRecords';
 import { applyDelivery, confirmDelivery, isSettled } from './services/bridgeStatus';
+import { getTransactionErrorMessage } from './utils/transactionError';
 
 export default function App() {
   const { t } = useI18n();
@@ -238,8 +239,8 @@ export default function App() {
       setRecords((prev) => mergeRecords([res.record], prev));
       setActiveRecordId(res.record.id);
       await fetchData();
-    } catch (err: any) {
-      alert(`${t('error.bridge_out_failed')}: ${err.message}`);
+    } catch (error: unknown) {
+      alert(`${t('error.bridge_out_failed')}: ${getTransactionErrorMessage(error, t)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -263,8 +264,8 @@ export default function App() {
       setRecords((prev) => mergeRecords([res.record], prev));
       setActiveRecordId(res.record.id);
       await fetchData();
-    } catch (err: any) {
-      alert(`${t('error.bridge_in_failed')}: ${err.message}`);
+    } catch (error: unknown) {
+      alert(`${t('error.bridge_in_failed')}: ${getTransactionErrorMessage(error, t)}`);
     } finally {
       setIsSubmitting(false);
     }
