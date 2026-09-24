@@ -14,6 +14,13 @@ interface ImportMetaEnv {
    * ⚠️ 不是 EVM JSON-RPC（8545），也不是 CometBFT RPC（26657）。
    */
   readonly VITE_REST_URL?: string;
+  /** Cosmos chain id used by the injected native wallet. */
+  readonly VITE_COSMOS_CHAIN_ID?: string;
+  /** Gas and fee defaults passed to the Cosmos wallet adapter. */
+  readonly VITE_COSMOS_GAS_LIMIT?: string;
+  readonly VITE_COSMOS_FEE_AMOUNT?: string;
+  readonly VITE_COSMOS_TX_POLL_MS?: string;
+  readonly VITE_COSMOS_TX_TIMEOUT_MS?: string;
 
   /** Atoshi 的 EVM JSON-RPC，用于等交易回执 */
   readonly VITE_ATOSHI_EVM_RPC?: string;

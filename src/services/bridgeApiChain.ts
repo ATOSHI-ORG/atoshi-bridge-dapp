@@ -42,6 +42,17 @@ import {
   restGet,
 } from './chainRest';
 import { bridgeServiceMock } from './bridgeApiMock';
+import {
+  isCosmosTxHash,
+  isEvmTxHash,
+  messageIdFromCosmosTx,
+  waitForCosmosTx,
+} from './cosmosTx';
+import {
+  bridgeOutMessage,
+  broadcastCosmos,
+  getCosmosProvider,
+} from '../wallet/cosmos';
 
 import {
   ATOSHI_CHAIN_ID,
@@ -397,8 +408,14 @@ async function submitBridgeOut(data: {
   recipient_eth_address: string;
   amount_atos: number;
 }): Promise<{ tx_hash: string; message_id: string; record: BridgeRecord }> {
-  const owner = connectedAddress();
-  await ensureChain(ATOSHI_CHAIN_ID, 'err.wrong_chain_for_out');
+  const cosmosProvider = getCosmosProvider();
+  let owner: `0x${string}` | undefined;
+  if (cosmosProvider) {
+    if (!data.sender) throw new ChainRestError(tr('err.connect_wallet'));
+  } else {
+    owner = connectedAddress();
+    await ensureChain(ATOSHI_CHAIN_ID, 'err.wrong_chain_for_out');
+  }
 
   // 参数现查，不写死：peg 和下限都是治理可改的参数。
   const params = await getBridgeParams();
@@ -424,24 +441,47 @@ async function submitBridgeOut(data: {
 
   const recipient = toHyperlane32Bytes(data.recipient_eth_address);
 
-  const hash = await writeContract(wagmiConfig, {
-    account: owner,
-    chain: atoshi,
-    address: BRIDGE_ADAPTER_PRECOMPILE,
-    abi: bridgeAdapterAbi,
-    functionName: 'bridgeOut',
-    // maxFeeAmount = 0：不设跨链费上限。设了上限而费用涨过它就会 revert，
-    // 而用户看到的是一句和金额无关的报错，比多付一点点费更难解释。
-    args: [recipient, amount, 0n],
-    gas: GAS_LIMITS.bridgeOut,
-  });
-
-  const receipt = await waitForTransactionReceipt(wagmiConfig, {
-    hash,
-    chainId: ATOSHI_CHAIN_ID,
-  });
-  if (receipt.status !== 'success') {
-    throw new ChainRestError(tr('err.bridge_reverted', { tx: hash }));
+  let hash: string;
+  let messageId = '';
+  if (cosmosProvider) {
+    const sent = await broadcastCosmos(
+      [bridgeOutMessage({ sender: data.sender, recipient, amount: amount.toString() })],
+      data.sender,
+    );
+    hash = sent.txHash;
+    const response = await waitForCosmosTx(hash);
+    messageId = messageIdFromCosmosTx(response);
+  } else {
+    // Existing EVM path. Some adapters may still return a Tendermint hash;
+    // the branch below keeps that compatibility without sending it to viem.
+    hash = String(await writeContract(wagmiConfig, {
+      account: owner!,
+      chain: atoshi,
+      address: BRIDGE_ADAPTER_PRECOMPILE,
+      abi: bridgeAdapterAbi,
+      functionName: 'bridgeOut',
+      // maxFeeAmount = 0：不设跨链费上限。设了上限而费用涨过它就会 revert，
+      // 而用户看到的是一句和金额无关的报错，比多付一点点费更难解释。
+      args: [recipient, amount, 0n],
+      gas: GAS_LIMITS.bridgeOut,
+    }));
+    if (isCosmosTxHash(hash)) {
+      const response = await waitForCosmosTx(hash);
+      messageId = messageIdFromCosmosTx(response);
+      // This is a wallet adapter compatibility path; it is still a Cosmos tx.
+    } else {
+      if (!isEvmTxHash(hash)) {
+        throw new ChainRestError(`钱包返回了无法识别的交易哈希: ${hash}`);
+      }
+      const receipt = await waitForTransactionReceipt(wagmiConfig, {
+        hash,
+        chainId: ATOSHI_CHAIN_ID,
+      });
+      if (receipt.status !== 'success') {
+        throw new ChainRestError(tr('err.bridge_reverted', { tx: hash }));
+      }
+      messageId = messageIdFrom(receipt.logs);
+    }
   }
 
   // No local usage bookkeeping here any more. The chain's own counter is
@@ -452,7 +492,7 @@ async function submitBridgeOut(data: {
   const now = Date.now();
   return {
     tx_hash: hash,
-    message_id: messageIdFrom(receipt.logs),
+    message_id: messageId,
     record: {
       id: hash,
       // messageId 必须写进 record 里，不能只放在响应顶层。
@@ -462,11 +502,11 @@ async function submitBridgeOut(data: {
       // delivered()。record.messageId 是 undefined 的话 confirmDelivery 一律
       // 返回 unknown，状态永远停在「进行中」—— 链上早就成功了，前端还显示
       // 进行中，正是测试反馈的那个问题。
-      messageId: messageIdFrom(receipt.logs),
+      messageId,
       direction: 'out' as BridgeDirection,
       amount: data.amount_atos,
       receivedAmount: data.amount_atos / Number(params.atos_per_erc20 || 100),
-      sender: data.sender || owner,
+      sender: data.sender || owner || '',
       recipient: data.recipient_eth_address,
       status: 'dispatched',
       currentStep: 2,

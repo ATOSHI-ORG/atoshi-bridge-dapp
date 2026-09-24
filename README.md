@@ -17,7 +17,7 @@ Atoshi 链 ⇄ 以太坊 双向跨链桥，以 WebView 形式嵌入 Atoshi 钱�
 | ATOS 余额 | ✅ | `bank/balances` |
 | ERC20 ATOS 余额 | ✅ | 以太坊合约调用 |
 | **桥入** Ethereum→Atoshi | ✅ | `AtosCollateral.transferRemote` |
-| **桥出** Atoshi→Ethereum | ✅ | bridgeadapter EVM 预编译 `0x…0808` |
+| **桥出** Atoshi→Ethereum | ✅ | EVM 预编译 `0x…0808`；可选 Cosmos `MsgBridgeOut` |
 | 跨链记录 / 状态查询 | ✅ | 记录保存在本机，两条链分别确认到账状态 |
 
 链上原生查询暂未暴露限额的今日已用量，所以 DApp 使用成功交易产生的
@@ -37,7 +37,31 @@ Blockscout 完成索引后再自动校准。
 
         ┌──── Atoshi 写 ────┐
 页面 ──> 钱包签名 ──> 0x…0808   bridgeOut（桥出）
+
+        ┌── Cosmos Atoshi 写 ──┐
+页面 ──> Cosmos 钱包签名广播 ──> MsgBridgeOut（可选桥出路径）
 ```
+
+桥出支持两种钱包模式。没有 Cosmos provider 时继续使用现有 EVM 预编译；钱包注入
+`window.atoshiCosmos`、`window.cosmos` 或兼容的 `window.keplr` 且提供
+`signAndBroadcast` / `sendCosmosTransaction` 时，桥出使用 Cosmos 原生消息。两种
+路径的交易确认分开处理：`0x...` 哈希查询 EVM receipt，64 位无前缀哈希查询
+Cosmos REST `/cosmos/tx/v1beta1/txs/{hash}`。桥入仍使用 Ethereum EVM 钱包。
+
+Cosmos provider 的广播接口约定如下：
+
+```ts
+signAndBroadcast(
+  chainId: 'atoshi_88288-1',
+  signerAddress: 'atoshi1...',
+  messages: [{ typeUrl: '/atoshi.bridgeadapter.v1.MsgBridgeOut', value: {/* ... */} }],
+  fee: { amount: [{ denom: 'liao', amount: '0' }], gas: '400000' },
+  memo: '',
+): Promise<{ txhash: string } | string>
+```
+
+钱包必须同时提供 `enable(chainId)` 和 `getKey(chainId)`，返回 `atoshi1...` 地址。
+金额使用最小单位整数字符串，`recipient` 使用 protobuf bytes 的 base64 表示。
 
 ### 桥入是两笔交易，不是一笔
 
